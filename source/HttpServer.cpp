@@ -114,9 +114,15 @@ void HttpServer::setHTTPHandler(const char* path, CallbackRequestHandler handler
 }
 
 
-CallbackRequestHandler HttpServer::getHTTPHandler(const char* path)
+CallbackRequestHandler HttpServer::getHTTPHandler(const char* url)
 {
 	HTTPSocketHandlerContainer::iterator it;
+
+    string path(url);
+    size_t found = path.find_last_of("/");
+    if(found) {
+        path.erase(found+1, path.length());
+    }
 
 	it = _HTTPHandlers.find(path);
 	if (it != _HTTPHandlers.end()) {

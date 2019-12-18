@@ -87,6 +87,25 @@ static const char* get_http_status_string(uint16_t status_code) {
     }
 }
 
+static const struct mapping_t {
+    const char* key;
+    const char* value;
+} fileTypeMapping[]  = {
+    {".gif", "Content-Type: image/gif"   },
+    {".jpg", "Content-Type: image/jpeg"  },
+    {".jpeg","Content-Type: image/jpeg"  },
+    {".ico", "Content-Type: image/x-icon"},
+    {".png", "Content-Type: image/png"   },
+    {".zip", "Content-Type: image/zip"   },
+    {".gz",  "Content-Type: image/gz"    },
+    {".tar", "Content-Type: image/tar"   },
+    {".txt", "Content-Type: plain/text"  },
+    {".pdf", "Content-Type: application/pdf" },
+    {".htm", "Content-Type: text/html"   },
+    {"html","Content-Type: text/html"   },
+    {".css", "Content-Type: text/css"    },
+    {".js",  "Content-Type: text/javascript"}};
+
 class HttpResponseBuilder {
 public:
     HttpResponseBuilder(uint16_t a_status_code)
@@ -107,6 +126,88 @@ public:
         else {
             headers.insert(headers.end(), pair<string, string>(key, value));
         }
+    }
+
+    int sendFile(TCPSocket* socket,  FileSystem *fs, string filename) {
+        _buffer.reserve(2048);
+
+        // open file and get filesize
+        filename = "/htmlRoot" + filename;
+
+        printf("sendFile: %s\n", filename.c_str());
+
+        size_t fileSize = 0;
+        File file;
+        int res = file.open(fs, filename.c_str());
+
+        if(res != 0) {
+            status_code = 404;
+        }
+        _buffer = "HTTP/1.1 ";
+        _buffer += to_string(status_code);
+        _buffer += " ";
+        _buffer += get_http_status_string(status_code);
+        _buffer += "\r\n";
+        
+        if(res == 0) {
+            fileSize = file.size();
+
+            if (filename.length() > 4) 
+                getStandardHeaders(filename.substr(filename.length()-4).c_str());
+            else
+                getStandardHeaders(nullptr);
+
+            set_header("Content-Length", to_string(fileSize));
+        }
+
+        typedef map<string, string>::iterator it_type;
+        for(it_type it = headers.begin(); it != headers.end(); it++) {
+            // line is KEY: VALUE\r\n
+            _buffer += it->first;
+            _buffer += ":";
+            _buffer += it->second;
+            _buffer += "\r\n";
+        }
+        _buffer += "\r\n";
+
+        printf(_buffer.c_str());
+
+        socket->set_blocking(true);
+        // send header
+        {
+            size_t bytesSent = 0;
+            while(bytesSent < _buffer.size()){
+                int sent = socket->send(_buffer.c_str() + bytesSent,  _buffer.size() - bytesSent);
+                if (sent == 0) {
+                    return -1;
+                }
+                bytesSent += sent;
+            }
+        }
+
+        // send file chunks
+        if(res == 0) {
+            const size_t maxChunkSize = 2*1024;
+            uint8_t *chunkBuffer = new uint8_t[maxChunkSize];
+            size_t bytesRead = 0;
+
+            while (bytesRead < fileSize) {
+                size_t chunkSize = min(fileSize - bytesRead, maxChunkSize);
+                size_t n = file.read(chunkBuffer, chunkSize);
+                bytesRead += n;
+                size_t bytesSent = 0;
+                while(bytesSent < n){
+                    int sent = socket->send(chunkBuffer + bytesSent, n - bytesSent);
+                    bytesSent += sent;
+                }
+            }
+
+            delete chunkBuffer;
+            file.close();
+        }
+
+
+        return fileSize;
     }
 
     char* build(const void* body, size_t body_size, size_t* size) {
@@ -176,9 +277,39 @@ public:
     }
 
 private:
+    void getStandardHeaders(const char* fext)
+    {
+        headers["DNT"] = "1";
+        headers["MaxAge"] = "0";
+        headers["Connection"] = "Keep-Alive";
+        headers["Server"] = "JojoS_Mbed_Server";
+        if (fext == nullptr)
+            headers["Content-Type"] = "text/html";
+        else {
+            for (size_t i = 0; i < sizeof(fileTypeMapping)/sizeof(struct mapping_t); i++) {
+                if (_stricmp(fileTypeMapping[i].key, fext) == 0) {
+                    headers["Content-Type"] = fileTypeMapping[i].value;
+                    break;
+                }
+            }
+        }
+    }
+
+    int _stricmp(const char* a, const char* b)
+    {
+        int la = strlen(a);
+        int lb = strlen(b);
+        for (int i = 0 ; i < min(la, lb) ; i++) {
+            if (tolower((int)a[i]) != tolower((int)b[i]))
+                return i;
+        }
+        return 0;
+    }
+
     uint16_t status_code;
     const char* status_message;
     map<string, string> headers;
+    string  _buffer;
 };
 
 #endif // _MBED_HTTP_RESPONSE_BUILDER_
