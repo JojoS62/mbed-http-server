@@ -55,7 +55,8 @@ ClientConnection::~ClientConnection() {
 void ClientConnection::start(TCPSocket* socket) {
     _socketIsOpen = true;
     _socket = socket;
-    _socket->set_timeout(1000);
+    //_socket->set_timeout(1000);
+    _socket->set_blocking(true);
     _webSocketHandler = nullptr; 
     _parser.clear();
     _request.clear();
@@ -68,8 +69,6 @@ void ClientConnection::receiveData() {
         _semWaitForSocket.acquire();
 
         while(_socketIsOpen) {
-            _socket->set_timeout(_wsTimerCycle);
-
             nsapi_size_or_error_t recv_ret;
             while ((recv_ret = _socket->recv(_recv_buffer, HTTP_RECEIVE_BUFFER_SIZE)) > 0) {
                 if (_isWebSocket) {
@@ -105,6 +104,7 @@ void ClientConnection::receiveData() {
                 } else {
                     if (_request.get_Upgrade()) {                 
                         handleUpgradeRequest();                             // handle upgrade request 
+                        _socket->set_timeout(_wsTimerCycle);
                         _timerWSTimeout.reset();
                         _timerWSTimeout.start();
                     } else {                                                
