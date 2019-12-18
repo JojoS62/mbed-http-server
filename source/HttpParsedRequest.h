@@ -75,10 +75,51 @@ public:
         return url;
     }
 
+    /*
+        return path up to last /
+    */
+    string get_path() {
+        string path(url);
+        size_t found = url.find_last_of("/");
+        if(found) {
+            path.erase(found+1, string::npos);
+        }
+        return path;
+    }
+
+    /*
+        return filename from last / to first ?
+    */
+    string get_filename() {
+        string filename;
+        size_t foundSlash = url.find_last_of("/");
+        if (foundSlash == string::npos)
+            foundSlash = 0;
+        size_t foundQM = url.find_first_of("?");
+        if (foundQM)
+            foundQM--;
+
+        filename = url.substr(foundSlash+1, foundQM - foundSlash);
+        return filename;
+    }
+
+    /*
+        return filename from first ? to end
+    */
+    string get_query() {
+        string query;
+        size_t foundQM = url.find_first_of("?");
+        if (foundQM == string::npos)
+            return query;
+
+        query = url.substr(foundQM);
+        return query;
+    }
+
     void set_method(http_method a_method) {
         method = a_method;
     }
-
+ 
     http_method get_method() {
         return method;
     }
