@@ -138,6 +138,27 @@ void ClientConnection::receiveData() {
     }
 }
 
+void ClientConnection::printRequestHeader()
+{
+#if 1
+    printf("[Http]Request came in: %s %s\n", http_method_str(_request.get_method()), _request.get_url().c_str());
+    
+    MapHeaderIterator it;
+    int i = 0;
+
+    for (it = _request.headers.begin(); it != _request.headers.end(); it++) {
+        printf("[%d] ", i);
+        printf(it->first.c_str());
+        printf(" : ");
+        printf(it->second.c_str());
+        printf("\n");
+        i++;
+    }
+    fflush(stdout);
+#endif
+
+}
+
 void ClientConnection::handleUpgradeRequest() {
     //HttpResponseBuilder builder(101);
     
