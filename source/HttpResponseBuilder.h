@@ -132,7 +132,35 @@ public:
         }
     }
 
-    int sendHeaderAndFile(FileSystem *fs, string filename) {
+    nsapi_size_or_error_t sendHeader() 
+    {
+        _buffer.reserve(2048);
+
+        _buffer = "HTTP/1.1 ";
+        _buffer += to_string(status_code);
+        _buffer += " ";
+        _buffer += get_http_status_string(status_code);
+        _buffer += "\r\n";
+
+        typedef map<string, string>::iterator it_type;
+        for(it_type it = headers.begin(); it != headers.end(); it++) {
+            // line is KEY: VALUE\r\n
+            _buffer += it->first;
+            _buffer += ":";
+            _buffer += it->second;
+            _buffer += "\r\n";
+        }
+        _buffer += "\r\n";
+
+        //printf(_buffer.c_str());
+
+        // send header
+        nsapi_size_or_error_t sent = _clientConnection->send(_buffer.c_str(),  _buffer.size());
+
+        return sent;
+    }
+
+    nsapi_size_or_error_t sendHeaderAndFile(FileSystem *fs, string filename) {
         _buffer.reserve(2048);
 
         // open file and get filesize
@@ -147,11 +175,6 @@ public:
         if(res != 0) {
             status_code = 404;
         }
-        _buffer = "HTTP/1.1 ";
-        _buffer += to_string(status_code);
-        _buffer += " ";
-        _buffer += get_http_status_string(status_code);
-        _buffer += "\r\n";
         
         if(res == 0) {
             fileSize = file.size();
@@ -164,20 +187,7 @@ public:
             set_header("Content-Length", to_string(fileSize));
         }
 
-        typedef map<string, string>::iterator it_type;
-        for(it_type it = headers.begin(); it != headers.end(); it++) {
-            // line is KEY: VALUE\r\n
-            _buffer += it->first;
-            _buffer += ":";
-            _buffer += it->second;
-            _buffer += "\r\n";
-        }
-        _buffer += "\r\n";
-
-        printf(_buffer.c_str());
-
-        // send header
-        nsapi_size_or_error_t sent = _clientConnection->send(_buffer.c_str(),  _buffer.size());
+        nsapi_size_or_error_t sent = sendHeader();
 
         // send file chunks
         if((res == 0) && (sent > 0)) {
@@ -263,6 +273,14 @@ public:
         nsapi_error_t r = _clientConnection->send(response, res_size);
 
         free(response);
+
+        return r;
+    }
+
+    nsapi_error_t sendBodyString(string body) {
+        if (!_clientConnection) return NSAPI_ERROR_NO_SOCKET;
+
+        nsapi_error_t r = _clientConnection->send(body.c_str(), body.length());
 
         return r;
     }
