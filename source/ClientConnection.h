@@ -26,6 +26,7 @@
 #include "mbed.h"
 #include "HttpRequestParser.h"
 #include "WebSocketHandler.h"
+#include "HTTPHandler.h"
 #include <string>
 #include <map>
 
@@ -91,6 +92,9 @@ public:
     void start(TCPSocket* socket);
     bool isIdle() {return !_socketIsOpen; };
 
+    // HTTP send
+    nsapi_size_or_error_t send(const char* buffer, size_t len);
+
     // Websocket functions
     uint8_t createHeader(uint8_t * buf, WSopcode_t opcode, size_t length, bool mask, uint8_t maskKey[4], bool fin);
     bool sendFrameHeader(WSopcode_t opcode, int length = 0, bool fin = true);
@@ -117,7 +121,7 @@ private:
     bool _mPrevFin;
     bool _cIsClient;
     uint8_t _recv_buffer[HTTP_RECEIVE_BUFFER_SIZE];
-    Callback<void(HttpParsedRequest* request, TCPSocket* socket)> _handler;
+    CallbackRequestHandler _handler;
     WebSocketHandler* _webSocketHandler;
     Timer _timerWSTimeout;
     int _wsTimerCycle;

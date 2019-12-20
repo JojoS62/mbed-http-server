@@ -110,7 +110,7 @@ void ClientConnection::receiveData() {
                     } else {                                                
                         _parser.finish();                                   // no websocket, normal http handling
                         _handler = _server->getHTTPHandler(_request.get_url().c_str());
-                        _handler(&_request, _socket);
+                        _handler(&_request, this);
                     } 
                 } 
             }
@@ -169,6 +169,22 @@ void ClientConnection::handleUpgradeRequest() {
             } 
         }
     }
+}
+
+nsapi_size_or_error_t ClientConnection::send(const char* buffer, size_t len)
+{
+    size_t bytesSent = 0;
+    while(bytesSent < len) {
+        nsapi_size_or_error_t sent = _socket->send(buffer + bytesSent,  len - bytesSent);
+        if (sent < 0) {
+            if (sent != NSAPI_ERROR_WOULD_BLOCK)
+                return sent;
+            else 
+                continue;
+        }
+        bytesSent += sent;
+    }
+    return bytesSent;
 }
 
 bool ClientConnection::handleWebSocket(int size)

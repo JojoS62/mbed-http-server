@@ -21,6 +21,8 @@
 #include <string>
 #include <map>
 #include "http_parser.h"
+#include "HttpParsedRequest.h"
+#include "ClientConnection.h"
 
 static const char* get_http_status_string(uint16_t status_code) {
     switch (status_code) {
@@ -108,8 +110,10 @@ static const struct mapping_t {
 
 class HttpResponseBuilder {
 public:
-    HttpResponseBuilder(uint16_t a_status_code)
-        : status_code(a_status_code), status_message(get_http_status_string(a_status_code))
+    HttpResponseBuilder(uint16_t a_status_code, ClientConnection* clientConnection) : 
+        status_code(a_status_code), 
+        _clientConnection(clientConnection),
+        status_message(get_http_status_string(a_status_code))
     {
     }
 
@@ -128,7 +132,7 @@ public:
         }
     }
 
-    int sendFile(TCPSocket* socket,  FileSystem *fs, string filename) {
+    int sendHeaderAndFile(FileSystem *fs, string filename) {
         _buffer.reserve(2048);
 
         // open file and get filesize
@@ -172,40 +176,27 @@ public:
 
         printf(_buffer.c_str());
 
-        socket->set_blocking(true);
         // send header
-        {
-            size_t bytesSent = 0;
-            while(bytesSent < _buffer.size()){
-                int sent = socket->send(_buffer.c_str() + bytesSent,  _buffer.size() - bytesSent);
-                if (sent == 0) {
-                    return -1;
-                }
-                bytesSent += sent;
-            }
-        }
+        nsapi_size_or_error_t sent = _clientConnection->send(_buffer.c_str(),  _buffer.size());
 
         // send file chunks
-        if(res == 0) {
+        if((res == 0) && (sent > 0)) {
             const size_t maxChunkSize = 2*1024;
-            uint8_t *chunkBuffer = new uint8_t[maxChunkSize];
+            char *chunkBuffer = new char[maxChunkSize];
             size_t bytesRead = 0;
 
             while (bytesRead < fileSize) {
                 size_t chunkSize = min(fileSize - bytesRead, maxChunkSize);
                 size_t n = file.read(chunkBuffer, chunkSize);
-                bytesRead += n;
-                size_t bytesSent = 0;
-                while(bytesSent < n){
-                    int sent = socket->send(chunkBuffer + bytesSent, n - bytesSent);
-                    bytesSent += sent;
-                }
+                nsapi_size_or_error_t sent = _clientConnection->send(chunkBuffer,  chunkSize);
+                if (sent > 0)
+                    bytesRead += n;
             }
 
             delete chunkBuffer;
-            file.close();
         }
 
+        file.close();
 
         return fileSize;
     }
@@ -263,13 +254,13 @@ public:
         return originalRes;
     }
 
-    nsapi_error_t send(TCPSocket* socket, const void* body, size_t body_size) {
-        if (!socket) return NSAPI_ERROR_NO_SOCKET;
+    nsapi_error_t send(const void* body, size_t body_size) {
+        if (!_clientConnection) return NSAPI_ERROR_NO_SOCKET;
 
         size_t res_size;
         char* response = build(body, body_size, &res_size);
 
-        nsapi_error_t r = socket->send(response, res_size);
+        nsapi_error_t r = _clientConnection->send(response, res_size);
 
         free(response);
 
@@ -307,6 +298,7 @@ private:
     }
 
     uint16_t status_code;
+    ClientConnection* _clientConnection;
     const char* status_message;
     map<string, string> headers;
     string  _buffer;

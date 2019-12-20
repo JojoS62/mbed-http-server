@@ -25,6 +25,7 @@
 
 #include "HttpParsedRequest.h"
 #include "WebSocketHandler.h"
+#include "HTTPHandler.h"
 #include "ClientConnection.h"
 
 #include <string>
@@ -48,13 +49,10 @@
 #define DEBUG_WEBSOCKETS(...)
 #endif
 
-typedef HttpParsedRequest ParsedHttpRequest;
+//typedef HttpParsedRequest ParsedHttpRequest;
 
 typedef WebSocketHandler* (*CreateWSHandlerFn)();
 typedef std::map<std::string, CreateWSHandlerFn> WebSocketHandlerContainer;
-
-typedef Callback<void(ParsedHttpRequest* request, TCPSocket* socket)> CallbackRequestHandler;
-typedef std::map<std::string, CallbackRequestHandler> HTTPSocketHandlerContainer;
 
 
 /**
@@ -105,7 +103,7 @@ private:
     int _nWorkerThreads;
     int _nWebSockets;
     int _nWebSocketsMax;
-    Callback<void(HttpParsedRequest* request, TCPSocket* socket)> _handler;
+    CallbackRequestHandler _handler;
     vector<ClientConnection*> _clientConnections;
 
     WebSocketHandlerContainer _WSHandlers;
