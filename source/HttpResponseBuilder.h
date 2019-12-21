@@ -166,8 +166,6 @@ public:
         // open file and get filesize
         filename = "/htmlRoot" + filename;
 
-        printf("sendFile: %s\n", filename.c_str());
-
         size_t fileSize = 0;
         File file;
         int res = file.open(fs, filename.c_str());
@@ -186,6 +184,8 @@ public:
 
             set_header("Content-Length", to_string(fileSize));
         }
+
+        printf("send file: %s  size: %ld Bytes\n", filename.c_str(), fileSize);
 
         nsapi_size_or_error_t sent = sendHeader();
 
