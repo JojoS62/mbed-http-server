@@ -86,7 +86,7 @@ class HttpServer;
 
 class ClientConnection {
 public:
-    ClientConnection(HttpServer* server);
+    ClientConnection(HttpServer* server, const char* name);
     ~ClientConnection();
 
     void start(TCPSocket* socket);

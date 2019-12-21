@@ -36,8 +36,8 @@
 
 
 
-ClientConnection::ClientConnection(HttpServer* server) :
-    _threadClientConnection(osPriorityNormal, 3*1024, nullptr, "HTTPClientThread"),
+ClientConnection::ClientConnection(HttpServer* server, const char* name) :
+    _threadClientConnection(osPriorityNormal, 3*1024, nullptr, name),
     _parser(&_request) 
 { 
     _isWebSocket = false;

@@ -42,7 +42,9 @@ nsapi_error_t HttpServer::start(uint16_t port) {
     // needs RAM for buffers!
     _clientConnections.reserve(_nWorkerThreads);
     for(int i=0; i < _nWorkerThreads; i++) {
-        ClientConnection *clientCon = new ClientConnection(this);
+        string *threadName = new string;
+        *threadName = "HTTPClientThread_" + to_string(i);
+        ClientConnection *clientCon = new ClientConnection(this, threadName->c_str());
         MBED_ASSERT(clientCon);
         _clientConnections.push_back(clientCon);
     }

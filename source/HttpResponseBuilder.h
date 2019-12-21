@@ -24,8 +24,8 @@
 #include "HttpParsedRequest.h"
 #include "ClientConnection.h"
 
-static const char* get_http_status_string(uint16_t status_code) {
-    switch (status_code) {
+static const char* get_http_status_string(uint16_t _statusCode) {
+    switch (_statusCode) {
         case 100: return "Continue";
         case 101: return "Switching Protocols";
         case 102: return "Processing";
@@ -110,11 +110,16 @@ static const struct mapping_t {
 
 class HttpResponseBuilder {
 public:
-    HttpResponseBuilder(uint16_t a_status_code, ClientConnection* clientConnection) : 
-        status_code(a_status_code), 
+    HttpResponseBuilder(uint16_t statusCode, ClientConnection* clientConnection) : 
+        _statusCode(statusCode), 
         _clientConnection(clientConnection),
-        status_message(get_http_status_string(a_status_code))
+        status_message(get_http_status_string(statusCode))
     {
+    }
+
+    void setStatusCode(uint16_t statusCode) {
+        _statusCode = statusCode;
+        status_message = get_http_status_string(statusCode);
     }
 
     /**
@@ -137,9 +142,9 @@ public:
         _buffer.reserve(2048);
 
         _buffer = "HTTP/1.1 ";
-        _buffer += to_string(status_code);
+        _buffer += to_string(_statusCode);
         _buffer += " ";
-        _buffer += get_http_status_string(status_code);
+        _buffer += get_http_status_string(_statusCode);
         _buffer += "\r\n";
 
         typedef map<string, string>::iterator it_type;
@@ -171,7 +176,7 @@ public:
         int res = file.open(fs, filename.c_str());
 
         if(res != 0) {
-            status_code = 404;
+            _statusCode = 404;
         }
         
         if(res == 0) {
@@ -216,13 +221,13 @@ public:
         snprintf(buffer, sizeof(buffer), "%d", body_size);
         set_header("Content-Length", string(buffer));
 
-        char status_code_buffer[6];
-        snprintf(status_code_buffer, sizeof(status_code_buffer), "%d", status_code /* max 5 digits */);
+        char _statusCode_buffer[6];
+        snprintf(_statusCode_buffer, sizeof(_statusCode_buffer), "%d", _statusCode /* max 5 digits */);
 
         *size = 0;
 
         // first line is HTTP/1.1 200 OK\r\n
-        *size += 8 + 1 + strlen(status_code_buffer) + 1 + strlen(status_message) + 2;
+        *size += 8 + 1 + strlen(_statusCode_buffer) + 1 + strlen(status_message) + 2;
 
         // after that we'll do the headers
         typedef map<string, string>::iterator it_type;
@@ -241,7 +246,7 @@ public:
         char* res = (char*)calloc(*size + 1, 1);
         char* originalRes = res;
 
-        res += sprintf(res, "HTTP/1.1 %s %s\r\n", status_code_buffer, status_message);
+        res += sprintf(res, "HTTP/1.1 %s %s\r\n", _statusCode_buffer, status_message);
 
         typedef map<string, string>::iterator it_type;
         for(it_type it = headers.begin(); it != headers.end(); it++) {
@@ -315,7 +320,7 @@ private:
         return 0;
     }
 
-    uint16_t status_code;
+    uint16_t _statusCode;
     ClientConnection* _clientConnection;
     const char* status_message;
     map<string, string> headers;
