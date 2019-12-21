@@ -185,7 +185,7 @@ public:
             set_header("Content-Length", to_string(fileSize));
         }
 
-        printf("send file: %s  size: %ld Bytes\n", filename.c_str(), fileSize);
+        printf("send file: %s  size: %d Bytes\n", filename.c_str(), fileSize);
 
         nsapi_size_or_error_t sent = sendHeader();
 
