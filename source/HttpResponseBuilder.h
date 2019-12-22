@@ -93,20 +93,20 @@ static const struct mapping_t {
     const char* key;
     const char* value;
 } fileTypeMapping[]  = {
-    {".gif", "Content-Type: image/gif"   },
-    {".jpg", "Content-Type: image/jpeg"  },
-    {".jpeg","Content-Type: image/jpeg"  },
-    {".ico", "Content-Type: image/x-icon"},
-    {".png", "Content-Type: image/png"   },
-    {".zip", "Content-Type: image/zip"   },
-    {".gz",  "Content-Type: image/gz"    },
-    {".tar", "Content-Type: image/tar"   },
-    {".txt", "Content-Type: plain/text"  },
-    {".pdf", "Content-Type: application/pdf" },
-    {".htm", "Content-Type: text/html"   },
-    {"html","Content-Type: text/html"   },
-    {".css", "Content-Type: text/css"    },
-    {".js",  "Content-Type: text/javascript"}};
+    {".gif", "image/gif"   },
+    {".jpg", "image/jpeg"  },
+    {".jpeg","image/jpeg"  },
+    {".ico", "image/x-icon"},
+    {".png", "image/png"   },
+    {".zip", "image/zip"   },
+    {".gz",  "image/gz"    },
+    {".tar", "image/tar"   },
+    {".txt", "plain/text"  },
+    {".pdf", "application/pdf" },
+    {".htm", "text/html; charset=utf-8"   },
+    {"html","text/html; charset=utf-8"   },
+    {".css", "text/css"    },
+    {".js",  "text/javascript"}};
 
 class HttpResponseBuilder {
 public:
@@ -294,11 +294,10 @@ private:
     void getStandardHeaders(const char* fext)
     {
         headers["DNT"] = "1";
-        headers["MaxAge"] = "0";
         headers["Connection"] = "Keep-Alive";
         headers["Server"] = "JojoS_Mbed_Server";
         if (fext == nullptr)
-            headers["Content-Type"] = "text/html";
+            headers["Content-Type"] = "text/html; charset=utf-8";
         else {
             for (size_t i = 0; i < sizeof(fileTypeMapping)/sizeof(struct mapping_t); i++) {
                 if (_stricmp(fileTypeMapping[i].key, fext) == 0) {
@@ -315,7 +314,7 @@ private:
         int lb = strlen(b);
         for (int i = 0 ; i < min(la, lb) ; i++) {
             if (tolower((int)a[i]) != tolower((int)b[i]))
-                return i;
+                return i+1;
         }
         return 0;
     }
