@@ -93,20 +93,20 @@ static const struct mapping_t {
     const char* key;
     const char* value;
 } fileTypeMapping[]  = {
-    {".gif", "image/gif"   },
-    {".jpg", "image/jpeg"  },
-    {".jpeg","image/jpeg"  },
-    {".ico", "image/x-icon"},
-    {".png", "image/png"   },
-    {".zip", "image/zip"   },
-    {".gz",  "image/gz"    },
-    {".tar", "image/tar"   },
-    {".txt", "plain/text"  },
-    {".pdf", "application/pdf" },
-    {".htm", "text/html; charset=utf-8"   },
+    {"gif", "image/gif"   },
+    {"jpg", "image/jpeg"  },
+    {"jpeg","image/jpeg"  },
+    {"ico", "image/x-icon"},
+    {"png", "image/png"   },
+    {"zip", "image/zip"   },
+    {"gz",  "image/gz"    },
+    {"tar", "image/tar"   },
+    {"txt", "plain/text"  },
+    {"pdf", "application/pdf" },
+    {"htm", "text/html; charset=utf-8"   },
     {"html","text/html; charset=utf-8"   },
-    {".css", "text/css"    },
-    {".js",  "text/javascript"}};
+    {"css", "text/css"    },
+    {"js",  "text/javascript"}};
 
 class HttpResponseBuilder {
 public:
@@ -135,6 +135,12 @@ public:
         else {
             headers.insert(headers.end(), pair<string, string>(key, value));
         }
+    }
+
+    nsapi_size_or_error_t sendHeader(uint16_t statusCode) 
+    {
+        setStatusCode(statusCode);
+        return sendHeader();
     }
 
     nsapi_size_or_error_t sendHeader() 
@@ -182,8 +188,8 @@ public:
         if(res == 0) {
             fileSize = file.size();
 
-            if (filename.length() > 4) 
-                getStandardHeaders(filename.substr(filename.length()-4).c_str());
+            if (filename.length() > 0) 
+                getStandardHeaders(filename.substr(filename.find_last_of(".")+1).c_str());
             else
                 getStandardHeaders(nullptr);
 
@@ -214,72 +220,6 @@ public:
         file.close();
 
         return fileSize;
-    }
-
-    char* build(const void* body, size_t body_size, size_t* size) {
-        char buffer[10];
-        snprintf(buffer, sizeof(buffer), "%d", body_size);
-        set_header("Content-Length", string(buffer));
-
-        char _statusCode_buffer[6];
-        snprintf(_statusCode_buffer, sizeof(_statusCode_buffer), "%d", _statusCode /* max 5 digits */);
-
-        *size = 0;
-
-        // first line is HTTP/1.1 200 OK\r\n
-        *size += 8 + 1 + strlen(_statusCode_buffer) + 1 + strlen(status_message) + 2;
-
-        // after that we'll do the headers
-        typedef map<string, string>::iterator it_type;
-        for(it_type it = headers.begin(); it != headers.end(); it++) {
-            // line is KEY: VALUE\r\n
-            *size += it->first.length() + 1 + 1 + it->second.length() + 2;
-        }
-
-        // then the body, first an extra newline
-        *size += 2;
-
-        // body
-        *size += body_size;
-
-        // Now let's print it
-        char* res = (char*)calloc(*size + 1, 1);
-        char* originalRes = res;
-
-        res += sprintf(res, "HTTP/1.1 %s %s\r\n", _statusCode_buffer, status_message);
-
-        typedef map<string, string>::iterator it_type;
-        for(it_type it = headers.begin(); it != headers.end(); it++) {
-            // line is KEY: VALUE\r\n
-            res += sprintf(res, "%s: %s\r\n", it->first.c_str(), it->second.c_str());
-        }
-
-        res += sprintf(res, "\r\n");
-
-        if (body_size > 0) {
-            memcpy(res, body, body_size);
-        }
-        res += body_size;
-
-        // Uncomment to debug...
-        // printf("----- BEGIN RESPONSE -----\n");
-        // printf("%s", originalRes);
-        // printf("----- END RESPONSE -----\n");
-
-        return originalRes;
-    }
-
-    nsapi_error_t send(const void* body, size_t body_size) {
-        if (!_clientConnection) return NSAPI_ERROR_NO_SOCKET;
-
-        size_t res_size;
-        char* response = build(body, body_size, &res_size);
-
-        nsapi_error_t r = _clientConnection->send(response, res_size);
-
-        free(response);
-
-        return r;
     }
 
     nsapi_error_t sendBodyString(string body) {
