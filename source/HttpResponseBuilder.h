@@ -234,7 +234,7 @@ private:
     void getStandardHeaders(const char* fext)
     {
         headers["DNT"] = "1";
-        headers["Connection"] = "Keep-Alive";
+        headers["Connection"] = "close";
         headers["Server"] = "JojoS_Mbed_Server";
         if (fext == nullptr)
             headers["Content-Type"] = "text/html; charset=utf-8";
