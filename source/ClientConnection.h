@@ -111,6 +111,7 @@ private:
     bool sendUpgradeResponse(const char* key);
     void printRequestHeader();
 
+    const char* _threadName;
     Semaphore _semWaitForSocket;
     bool _socketIsOpen;
     HttpServer* _server;

@@ -40,6 +40,7 @@ ClientConnection::ClientConnection(HttpServer* server, const char* name) :
     _threadClientConnection(osPriorityNormal, 3*1024, nullptr, name),
     _parser(&_request) 
 { 
+    _threadName = name;
     _isWebSocket = false;
     _server = server;
     _cIsClient = false;          // for websocket send, meaning ???
@@ -68,6 +69,7 @@ void ClientConnection::receiveData() {
         bool wsCloseRequest = false;
         _semWaitForSocket.acquire();
 
+        printf("receiveData run %s\n", _threadName);
         while(_socketIsOpen) {
             nsapi_size_or_error_t recv_ret;
             while ((recv_ret = _socket->recv(_recv_buffer, HTTP_RECEIVE_BUFFER_SIZE)) > 0) {
@@ -130,7 +132,7 @@ void ClientConnection::receiveData() {
                 }
             } else
             {
-                //printf("recv_ret: %d\n", recv_ret);
+                printf("socket closed, recv_ret %d on  %s\n", recv_ret, _threadName);
                 _socket->close();                       // close socket. Because allocated by accept(), it will be deleted by itself
                 _socketIsOpen = false;
             }
