@@ -188,15 +188,23 @@ public:
         nsapi_size_or_error_t sent = sendHeader();
 
         // send file chunks
-        if((res == 0) && (sent > 0)) {
+        if ((res == 0) && (sent > 0)) {
             const size_t maxChunkSize = 2*1024;
             char *chunkBuffer = new char[maxChunkSize];
+            MBED_ASSERT(chunkBuffer);
             size_t bytesRead = 0;
 
             while (bytesRead < fileSize) {
                 size_t chunkSize = min(fileSize - bytesRead, maxChunkSize);
                 size_t n = file.read(chunkBuffer, chunkSize);
-                nsapi_size_or_error_t sent = _clientConnection->send(chunkBuffer,  chunkSize);
+                if (n != chunkSize) {
+                    int err = errno;
+                    print_log("%s: Error reading file: %s  size: %d Bytes errno: %d\n", 
+                        _clientConnection->getThreadname(), filename.c_str(), chunkSize, errno);
+                    file.close();
+                    return err;
+                }
+                nsapi_size_or_error_t sent = _clientConnection->send(chunkBuffer,  n);
                 if (sent > 0)
                     bytesRead += n;
             }
@@ -204,7 +212,9 @@ public:
             delete chunkBuffer;
         }
 
-        file.close();
+        if (res == 0) {
+            file.close();
+        }
 
         return fileSize;
     }
