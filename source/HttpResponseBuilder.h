@@ -122,20 +122,7 @@ public:
         status_message = get_http_status_string(statusCode);
     }
 
-    /**
-     * Set a header for the request
-     * If the key already exists, it will be overwritten...
-     */
-    void set_header(string key, string value) {
-        map<string, string>::iterator it = headers.find(key);
-
-        if (it != headers.end()) {
-            it->second = value;
-        }
-        else {
-            headers.insert(headers.end(), pair<string, string>(key, value));
-        }
-    }
+    map<string, string> headers;
 
     nsapi_size_or_error_t sendHeader(uint16_t statusCode) 
     {
@@ -145,7 +132,7 @@ public:
 
     nsapi_size_or_error_t sendHeader() 
     {
-        _buffer.reserve(2048);
+        _buffer.reserve(1024);
 
         _buffer = "HTTP/1.1 ";
         _buffer += to_string(_statusCode);
@@ -193,10 +180,10 @@ public:
             else
                 getStandardHeaders(nullptr);
 
-            set_header("Content-Length", to_string(fileSize));
+            headers["Content-Length"] = to_string(fileSize);
         }
 
-        printf("send file: %s  size: %d Bytes\n", filename.c_str(), fileSize);
+        print_log("%s: send file: %s  size: %d Bytes\n", _clientConnection->getThreadname(), filename.c_str(), fileSize);
 
         nsapi_size_or_error_t sent = sendHeader();
 
@@ -262,7 +249,6 @@ private:
     uint16_t _statusCode;
     ClientConnection* _clientConnection;
     const char* status_message;
-    map<string, string> headers;
     string  _buffer;
 };
 
