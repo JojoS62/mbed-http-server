@@ -29,6 +29,7 @@
 #include "HTTPHandler.h"
 #include <string>
 #include <map>
+#include "globalVars.h"
 
 // max size of the WS Message Header
 #define WEBSOCKETS_MAX_HEADER_SIZE (14)
@@ -102,6 +103,7 @@ public:
 
     HttpServer* getServer() { return _server; };
     void setWSTimer(int time_ms) {_wsTimerCycle = time_ms;};
+    const char* getThreadname() { return _threadName; };
 
 private:
     void receiveData();

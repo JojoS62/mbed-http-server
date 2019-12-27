@@ -22,7 +22,7 @@
 
 #include "ClientConnection.h"
 #include "HttpServer.h"
-
+#include "globalVars.h"
 #include "sha1_ws.h"
 
 #define MAGIC_NUMBER		"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -56,8 +56,7 @@ ClientConnection::~ClientConnection() {
 void ClientConnection::start(TCPSocket* socket) {
     _socketIsOpen = true;
     _socket = socket;
-    //_socket->set_timeout(1000);
-    _socket->set_blocking(true);
+    _socket->set_timeout(5000);
     _webSocketHandler = nullptr; 
     _parser.clear();
     _request.clear();
@@ -69,9 +68,12 @@ void ClientConnection::receiveData() {
         bool wsCloseRequest = false;
         _semWaitForSocket.acquire();
 
-        printf("receiveData run %s\n", _threadName);
+        print_log("%s: run receiveData\n", _threadName);
         while(_socketIsOpen) {
             nsapi_size_or_error_t recv_ret;
+            if (!_isWebSocket) {
+                _socket->set_timeout(5000);     // timeout to defend connections without sending data
+            }
             while ((recv_ret = _socket->recv(_recv_buffer, HTTP_RECEIVE_BUFFER_SIZE)) > 0) {
                 if (_isWebSocket) {
                     break;  // Websocket must not be parsed
@@ -80,7 +82,7 @@ void ClientConnection::receiveData() {
                 // Pass the chunk into the http_parser
                 int nparsed = _parser.execute((const char*)_recv_buffer, recv_ret);
                 if (nparsed != recv_ret) {
-                    printf("Parsing failed... parsed %d bytes, received %d bytes\n", nparsed, recv_ret);
+                    print_log("%s: Parsing failed... parsed %d bytes, received %d bytes\n", _threadName, nparsed, recv_ret);
                     recv_ret = -2101;
                     break;
                 }
@@ -132,7 +134,7 @@ void ClientConnection::receiveData() {
                 }
             } else
             {
-                printf("socket closed, recv_ret %d on  %s\n", recv_ret, _threadName);
+                print_log("%s: socket closed, recv_ret %d\n", _threadName, recv_ret);
                 _socket->close();                       // close socket. Because allocated by accept(), it will be deleted by itself
                 _socketIsOpen = false;
             }
@@ -142,23 +144,20 @@ void ClientConnection::receiveData() {
 
 void ClientConnection::printRequestHeader()
 {
-#if 1
-    printf("[Http]Request came in: %s %s\n", http_method_str(_request.get_method()), _request.get_url().c_str());
+    print_log("[Http]Request came in: %s %s\n", http_method_str(_request.get_method()), _request.get_url().c_str());
     
     MapHeaderIterator it;
     int i = 0;
 
     for (it = _request.headers.begin(); it != _request.headers.end(); it++) {
-        printf("[%d] ", i);
-        printf(it->first.c_str());
-        printf(" : ");
-        printf(it->second.c_str());
-        printf("\n");
+        debug("[%d] ", i);
+        debug(it->first.c_str());
+        debug(" : ");
+        debug(it->second.c_str());
+        debug("\n");
         i++;
     }
     fflush(stdout);
-#endif
-
 }
 
 void ClientConnection::handleUpgradeRequest() {
@@ -229,7 +228,7 @@ bool ClientConnection::handleWebSocket(int size)
 	ptr++;
 
 	if (!fin || !_mPrevFin) {	
-		printf("WARN: Data consists of multiple frame not supported\r\n");
+		print_log("WARN: Data consists of multiple frame not supported\r\n");
 		_mPrevFin = fin;
 		return true; // not an error, just discard it
 	}
@@ -240,7 +239,7 @@ bool ClientConnection::handleWebSocket(int size)
 	ptr++;
 	
 	if (len > 125) {
-		printf("WARN: Extended payload length not supported\r\n");
+		print_log("WARN: Extended payload length not supported\r\n");
 		return true; // not an error, just discard it
 	}
 
@@ -336,7 +335,7 @@ bool ClientConnection::sendUpgradeResponse(const char* key)
 
     int ret = _socket->send(resp, strlen(resp));
     if (ret < 0) {
-    	printf("ERROR: Failed to send response\r\n");
+    	print_log("ERROR: Failed to send response\r\n");
     	return false;
     }
 
