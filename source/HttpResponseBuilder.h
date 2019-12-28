@@ -199,8 +199,8 @@ public:
                 size_t n = file.read(chunkBuffer, chunkSize);
                 if (n != chunkSize) {
                     int err = errno;
-                    print_log("%s: Error reading file: %s  size: %d Bytes errno: %d\n", 
-                        _clientConnection->getThreadname(), filename.c_str(), chunkSize, errno);
+                    print_log("%s: Error reading file: %s  chunksize: %d Bytes read Bytes %d errno: %d\n", 
+                        _clientConnection->getThreadname(), filename.c_str(), chunkSize, n, err);
                     file.close();
                     return err;
                 }
