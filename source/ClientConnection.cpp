@@ -22,7 +22,6 @@
 
 #include "ClientConnection.h"
 #include "HttpServer.h"
-#include "globalVars.h"
 #include "sha1_ws.h"
 
 #define MAGIC_NUMBER		"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -68,7 +67,7 @@ void ClientConnection::receiveData() {
         bool wsCloseRequest = false;
         _semWaitForSocket.acquire();
 
-        print_log("%s: run receiveData\n", _threadName);
+        debug("%s: run receiveData\n", _threadName);
         while(_socketIsOpen) {
             nsapi_size_or_error_t recv_ret;
             if (!_isWebSocket) {
@@ -82,7 +81,7 @@ void ClientConnection::receiveData() {
                 // Pass the chunk into the http_parser
                 int nparsed = _parser.execute((const char*)_recv_buffer, recv_ret);
                 if (nparsed != recv_ret) {
-                    print_log("%s: Parsing failed... parsed %d bytes, received %d bytes\n", _threadName, nparsed, recv_ret);
+                    debug("%s: Parsing failed... parsed %d bytes, received %d bytes\n", _threadName, nparsed, recv_ret);
                     recv_ret = -2101;
                     break;
                 }
@@ -134,7 +133,7 @@ void ClientConnection::receiveData() {
                 }
             } else
             {
-                print_log("%s: socket closed, recv_ret %d\n", _threadName, recv_ret);
+                debug("%s: socket closed, recv_ret %d\n", _threadName, recv_ret);
                 _socket->close();                       // close socket. Because allocated by accept(), it will be deleted by itself
                 _socketIsOpen = false;
             }
@@ -144,7 +143,7 @@ void ClientConnection::receiveData() {
 
 void ClientConnection::printRequestHeader()
 {
-    print_log("[Http]Request came in: %s %s\n", http_method_str(_request.get_method()), _request.get_url().c_str());
+    debug("[Http]Request came in: %s %s\n", http_method_str(_request.get_method()), _request.get_url().c_str());
     
     MapHeaderIterator it;
     int i = 0;
@@ -228,7 +227,7 @@ bool ClientConnection::handleWebSocket(int size)
 	ptr++;
 
 	if (!fin || !_mPrevFin) {	
-		print_log("WARN: Data consists of multiple frame not supported\r\n");
+		debug("WARN: Data consists of multiple frame not supported\r\n");
 		_mPrevFin = fin;
 		return true; // not an error, just discard it
 	}
@@ -239,7 +238,7 @@ bool ClientConnection::handleWebSocket(int size)
 	ptr++;
 	
 	if (len > 125) {
-		print_log("WARN: Extended payload length not supported\r\n");
+		debug("WARN: Extended payload length not supported\r\n");
 		return true; // not an error, just discard it
 	}
 
@@ -335,7 +334,7 @@ bool ClientConnection::sendUpgradeResponse(const char* key)
 
     int ret = _socket->send(resp, strlen(resp));
     if (ret < 0) {
-    	print_log("ERROR: Failed to send response\r\n");
+    	debug("ERROR: Failed to send response\r\n");
     	return false;
     }
 

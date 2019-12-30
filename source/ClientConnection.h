@@ -29,7 +29,6 @@
 #include "HTTPHandler.h"
 #include <string>
 #include <map>
-#include "globalVars.h"
 
 // max size of the WS Message Header
 #define WEBSOCKETS_MAX_HEADER_SIZE (14)

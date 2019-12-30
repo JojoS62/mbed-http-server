@@ -183,7 +183,7 @@ public:
             headers["Content-Length"] = to_string(fileSize);
         }
 
-        print_log("%s: send file: %s  size: %d Bytes\n", _clientConnection->getThreadname(), filename.c_str(), fileSize);
+        debug("%s: send file: %s  size: %d Bytes\n", _clientConnection->getThreadname(), filename.c_str(), fileSize);
 
         nsapi_size_or_error_t sent = sendHeader();
 
@@ -199,7 +199,7 @@ public:
                 size_t n = file.read(chunkBuffer, chunkSize);
                 if (n != chunkSize) {
                     int err = errno;
-                    print_log("%s: Error reading file: %s  chunksize: %d Bytes read Bytes %d errno: %d\n", 
+                    debug("%s: Error reading file: %s  chunksize: %d Bytes read Bytes %d errno: %d\n", 
                         _clientConnection->getThreadname(), filename.c_str(), chunkSize, n, err);
                     file.close();
                     return err;
