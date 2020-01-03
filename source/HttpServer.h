@@ -32,17 +32,6 @@
 #include <map>
 #include <vector>
 
-#ifndef HTTP_SERVER_MAX_CONCURRENT
-#define HTTP_SERVER_MAX_CONCURRENT      5
-#endif
-
-#if HTTP_SERVER_MAX_CONCURRENT > MBED_CONF_LWIP_SOCKET_MAX
-#warning "HTTP_SERVER_MAX_CONCURRENT > MBED_CONF_LWIP_SOCKET_MAX, HTTPServer needs more sockets for this setting, increase socket count in mbed_app.json"
-#endif
-#if HTTP_SERVER_MAX_CONCURRENT > MBED_CONF_LWIP_TCP_SOCKET_MAX
-#warning "HTTP_SERVER_MAX_CONCURRENT > MBED_CONF_LWIP_TCP_SOCKET_MAX, HTTPServer needs more TCP sockets for this setting, increase socket count in mbed_app.json"
-#endif
-
 #ifdef DEBUG_WEBSOCKETS
 #define DEBUG_WEBSOCKETS(...) printf(__VA_ARGS__)
 #else

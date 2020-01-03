@@ -64,7 +64,7 @@ nsapi_error_t HttpServer::start(uint16_t port) {
         return ret;
     }
 
-    _serverSocket->listen(HTTP_SERVER_MAX_CONCURRENT); // max. concurrent connections...
+    _serverSocket->listen(_nWorkerThreads); // max. concurrent connections...
 
     _threadHTTPServer.start(callback(this, &HttpServer::main));
 
