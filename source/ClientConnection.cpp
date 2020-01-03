@@ -113,7 +113,8 @@ void ClientConnection::receiveData() {
                     } else {                                                
                         _parser.finish();                                   // no websocket, normal http handling
                         _handler = _server->getHTTPHandler(_request.get_url().c_str());
-                        _handler(&_request, this);
+                        if (_handler)
+                            _handler(&_request, this);
                     } 
                 } 
             }
