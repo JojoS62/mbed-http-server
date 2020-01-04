@@ -20,10 +20,8 @@
 
 #include "mbed.h"
 
-#include "HttpRequestParser.h"
 #include "HttpResponseBuilder.h"
 
-#include "HttpParsedRequest.h"
 #include "WebSocketHandler.h"
 #include "HTTPHandler.h"
 #include "ClientConnection.h"
