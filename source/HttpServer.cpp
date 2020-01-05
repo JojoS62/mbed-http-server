@@ -32,6 +32,7 @@ HttpServer::HttpServer(NetworkInterface* network, int nWorkerThreads, int nWebSo
 }
 
 HttpServer::~HttpServer() {
+    debug("HTTPServer shutdown\n");
 }
 
 /**
