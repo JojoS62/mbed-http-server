@@ -23,9 +23,10 @@
 #include "http_parser.h"
 #include "HttpParsedRequest.h"
 #include "ClientConnection.h"
+#include "HttpServer.h"
 
-static const char* get_http_status_string(uint16_t _statusCode) {
-    switch (_statusCode) {
+static const char* get_http_status_string(uint16_t statusCode) {
+    switch (statusCode) {
         case 100: return "Continue";
         case 101: return "Switching Protocols";
         case 102: return "Processing";
@@ -110,37 +111,35 @@ static const struct mapping_t {
 
 class HttpResponseBuilder {
 public:
-    HttpResponseBuilder(uint16_t statusCode, ClientConnection* clientConnection) : 
-        _statusCode(statusCode), 
-        _clientConnection(clientConnection),
-        status_message(get_http_status_string(statusCode))
+    HttpResponseBuilder(ClientConnection* clientConnection) : 
+        _clientConnection(clientConnection)
     {
-    }
-
-    void setStatusCode(uint16_t statusCode) {
-        _statusCode = statusCode;
-        status_message = get_http_status_string(statusCode);
     }
 
     map<string, string> headers;
 
     nsapi_size_or_error_t sendHeader(uint16_t statusCode) 
     {
-        setStatusCode(statusCode);
-        return sendHeader();
-    }
-
-    nsapi_size_or_error_t sendHeader() 
-    {
         _buffer.reserve(1024);
 
         _buffer = "HTTP/1.1 ";
-        _buffer += to_string(_statusCode);
+        _buffer += to_string(statusCode);
         _buffer += " ";
-        _buffer += get_http_status_string(_statusCode);
+        _buffer += get_http_status_string(statusCode);
         _buffer += "\r\n";
 
         typedef map<string, string>::iterator it_type;
+        // get standardHeaders from HTTPServer
+        map<string, string> standardHeaders = _clientConnection->getServer()->getStandardHeaders();
+        for(it_type it = standardHeaders.begin(); it != standardHeaders.end(); it++) {
+            // line is KEY: VALUE\r\n
+            _buffer += it->first;
+            _buffer += ":";
+            _buffer += it->second;
+            _buffer += "\r\n";
+        }
+
+        // send additional Headers
         for(it_type it = headers.begin(); it != headers.end(); it++) {
             // line is KEY: VALUE\r\n
             _buffer += it->first;
@@ -148,6 +147,7 @@ public:
             _buffer += it->second;
             _buffer += "\r\n";
         }
+
         _buffer += "\r\n";
 
         //printf(_buffer.c_str());
@@ -159,18 +159,12 @@ public:
     }
 
     nsapi_size_or_error_t sendHeaderAndFile(FileSystem *fs, string filename) {
-        _buffer.reserve(2048);
-
         // open file and get filesize
-        filename = "/htmlRoot" + filename;
-
         size_t fileSize = 0;
         File file;
         int res = file.open(fs, filename.c_str());
 
-        if(res != 0) {
-            _statusCode = 404;
-        }
+        uint16_t statusCode = 404;
         
         if(res == 0) {
             fileSize = file.size();
@@ -181,11 +175,13 @@ public:
                 getStandardHeaders(nullptr);
 
             headers["Content-Length"] = to_string(fileSize);
+
+            statusCode = 200;
         }
 
         debug("%s: send file: %s  size: %d Bytes\n", _clientConnection->getThreadname(), filename.c_str(), fileSize);
 
-        nsapi_size_or_error_t sent = sendHeader();
+        nsapi_size_or_error_t sent = sendHeader(statusCode);
 
         // send file chunks
         if ((res == 0) && (sent > 0)) {
@@ -219,20 +215,22 @@ public:
         return fileSize;
     }
 
-    nsapi_error_t sendBodyString(string body) {
-        if (!_clientConnection) return NSAPI_ERROR_NO_SOCKET;
+    nsapi_error_t sendContent(uint16_t statusCode, string content, const char* contentType = "text/html; charset=utf-8") 
+    {
+        headers["Content-Type"] = contentType;
+        headers["Connection"] = "close";
 
-        nsapi_error_t r = _clientConnection->send(body.c_str(), body.length());
+        nsapi_size_or_error_t sent = sendHeader(statusCode);
+        if (sent >= 0) {
+            sent = _clientConnection->send(content.c_str(), content.length());
+        }
 
-        return r;
+        return sent;
     }
 
 private:
     void getStandardHeaders(const char* fext)
     {
-        headers["DNT"] = "1";
-        headers["Connection"] = "close";
-        headers["Server"] = "JojoS_Mbed_Server";
         if (fext == nullptr)
             headers["Content-Type"] = "text/html; charset=utf-8";
         else {
@@ -256,7 +254,6 @@ private:
         return 0;
     }
 
-    uint16_t _statusCode;
     ClientConnection* _clientConnection;
     const char* status_message;
     string  _buffer;

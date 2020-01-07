@@ -20,7 +20,7 @@
 
 #include "mbed.h"
 
-#include "HttpResponseBuilder.h"
+//#include "HttpResponseBuilder.h"
 
 #include "WebSocketHandler.h"
 #include "HTTPHandler.h"
@@ -35,8 +35,6 @@
 #else
 #define DEBUG_WEBSOCKETS(...)
 #endif
-
-//typedef HttpParsedRequest ParsedHttpRequest;
 
 typedef WebSocketHandler* (*CreateWSHandlerFn)();
 typedef std::map<std::string, CreateWSHandlerFn> WebSocketHandlerContainer;
@@ -67,6 +65,9 @@ public:
     void setWSHandler(const char* path, CreateWSHandlerFn handler);
     CreateWSHandlerFn getWSHandler(const char* path);
 
+    void addStandardHeader(const char* key, const char* value);
+    const map<string, string>& getStandardHeaders();
+
     bool isWebsocketAvailable() { return (_nWebSockets < _nWebSocketsMax); };
     int getWebsocketCount() { return _nWebSockets; };
     bool incWebsocketCount() { 
@@ -95,6 +96,8 @@ private:
 
     WebSocketHandlerContainer _WSHandlers;
     HTTPSocketHandlerContainer _HTTPHandlers;
+
+    map<string, string> standardHeaders;
 };
 
 #endif // __HTTP_SERVER_h__

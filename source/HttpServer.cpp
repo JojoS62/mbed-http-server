@@ -140,3 +140,13 @@ CallbackRequestHandler HttpServer::getHTTPHandler(const char* url)
         return nullptr;
 }
 
+void HttpServer::addStandardHeader(const char* key, const char* value)
+{
+    standardHeaders[key] = value;
+}
+
+const map<string, string>& HttpServer::getStandardHeaders()
+{
+    return standardHeaders;
+}
+
