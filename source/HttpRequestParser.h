@@ -119,7 +119,7 @@ private:
     }
 
     int on_message_complete(http_parser* parser) {
-        _parsedRequest->set_message_complete();
+        _parsedRequest->set_message_complete(parser);
 
         return 0;
     }
