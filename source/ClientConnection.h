@@ -25,6 +25,7 @@
 
 #include "mbed.h"
 #include "HttpRequestParser.h"
+#include "HttpParsedRequest.h"
 #include "WebSocketHandler.h"
 #include "HTTPHandler.h"
 #include <string>
