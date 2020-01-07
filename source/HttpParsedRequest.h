@@ -227,8 +227,10 @@ public:
         is_chunked = true;
     }
 
-    void set_message_complete() {
+    void set_message_complete(http_parser* parser) {
         is_message_completed = true;
+        http_major = parser->http_major;
+        http_minor = parser->http_minor;
     }
 
 private:
@@ -268,6 +270,8 @@ private:
     bool is_chunked;
     bool is_message_completed;
     bool is_Upgrade;                // upgrade requst found
+    uint16_t http_minor;
+    uint16_t http_major;
 
     char * body;
     uint32_t body_length;
