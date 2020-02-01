@@ -55,8 +55,8 @@ ClientConnection::~ClientConnection() {
 void ClientConnection::start(TCPSocket* socket) {
     _socketIsOpen = true;
     _socket = socket;
-    //_socket->set_timeout(10000);
-    _socket->set_blocking(false);
+    _socket->set_timeout(10000);
+    //_socket->set_blocking(false);
     _webSocketHandler = nullptr; 
     _parser.clear();
     _request.clear();
@@ -71,9 +71,9 @@ void ClientConnection::receiveData() {
         debug("%s: run receiveData\n", _threadName);
         while(_socketIsOpen) {
             nsapi_size_or_error_t recv_ret;
-            // if (!_isWebSocket) {
-            //     _socket->set_timeout(10000);     // timeout to defend connections without sending data
-            // }
+            if (!_isWebSocket) {
+                _socket->set_timeout(10000);     // timeout to defend connections without sending data
+            }
             while ((recv_ret = _socket->recv(_recv_buffer, HTTP_RECEIVE_BUFFER_SIZE)) > 0) {
                 if (_isWebSocket) {
                     break;  // Websocket must not be parsed
