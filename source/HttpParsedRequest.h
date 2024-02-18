@@ -19,7 +19,7 @@
 #define _MBED_HTTP_HTTP_RESPONSE
 #include <string>
 #include <map>
-#include "http_parser.h"
+#include "../http_parser/http_parser.h"
 
 using namespace std;
 

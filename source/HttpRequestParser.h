@@ -18,7 +18,7 @@
 #ifndef _HTTP_RESPONSE_PARSER_H_
 #define _HTTP_RESPONSE_PARSER_H_
 
-#include "http_parser.h"
+#include "../http_parser/http_parser.h"
 #include "HttpParsedRequest.h"
 
 class HttpRequestParser {
