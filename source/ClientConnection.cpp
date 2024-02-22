@@ -122,7 +122,7 @@ void ClientConnection::receiveData() {
 
             // check for connection close
             if(_isWebSocket) {
-                if (wsCloseRequest || (recv_ret == 0) || (_timerWSTimeout.read_ms() > 20000) ) {
+                if (wsCloseRequest || (recv_ret == 0) || (_timerWSTimeout.elapsed_time() > 20s) ) {
                     _webSocketHandler->onClose();
                     sendFrame(WSop_close);
                     _server->decWebsocketCount();       // websocket was closed, decrement websocket count
