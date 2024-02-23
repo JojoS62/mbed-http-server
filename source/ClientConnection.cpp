@@ -34,6 +34,43 @@
 #define OP_PING		0x9
 #define OP_PONG		0xA
 
+// max size of the WS Message Header
+#define WEBSOCKETS_MAX_HEADER_SIZE (14)
+
+typedef enum {
+    WSC_NOT_CONNECTED,
+    WSC_HEADER,
+    WSC_CONNECTED
+} WSclientsStatus_t;
+
+typedef enum {
+    WStype_ERROR,
+    WStype_DISCONNECTED,
+    WStype_CONNECTED,
+    WStype_TEXT,
+    WStype_BIN,
+    WStype_FRAGMENT_TEXT_START,
+    WStype_FRAGMENT_BIN_START,
+    WStype_FRAGMENT,
+    WStype_FRAGMENT_FIN,
+    WStype_PING,
+    WStype_PONG,
+} WStype_t;
+
+typedef struct {
+    bool fin;
+    bool rsv1;
+    bool rsv2;
+    bool rsv3;
+
+    WSopcode_t opCode;
+    bool mask;
+
+    size_t payloadLen;
+
+    uint8_t * maskKey;
+} WSMessageHeader_t;
+
 
 
 ClientConnection::ClientConnection(HttpServer* server, const char* name) :
@@ -109,7 +146,7 @@ void ClientConnection::receiveData() {
                 } else {
                     if (_request.get_Upgrade()) {                 
                         handleUpgradeRequest();                             // handle upgrade request 
-                        _socket->set_timeout(_wsTimerCycle);
+                        _socket->set_timeout(_wsTimerCycle.count());
                         _timerWSTimeout.reset();
                         _timerWSTimeout.start();
                     } else {                                                

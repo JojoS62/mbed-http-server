@@ -31,29 +31,9 @@
 #include <string>
 #include <map>
 
-// max size of the WS Message Header
-#define WEBSOCKETS_MAX_HEADER_SIZE (14)
+using namespace std::chrono;
 
-typedef enum {
-    WSC_NOT_CONNECTED,
-    WSC_HEADER,
-    WSC_CONNECTED
-} WSclientsStatus_t;
-
-typedef enum {
-    WStype_ERROR,
-    WStype_DISCONNECTED,
-    WStype_CONNECTED,
-    WStype_TEXT,
-    WStype_BIN,
-    WStype_FRAGMENT_TEXT_START,
-    WStype_FRAGMENT_BIN_START,
-    WStype_FRAGMENT,
-    WStype_FRAGMENT_FIN,
-    WStype_PING,
-    WStype_PONG,
-} WStype_t;
-
+// Websocket defines
 typedef enum {
     WSop_continuation = 0x00,    ///< %x0 denotes a continuation frame
     WSop_text         = 0x01,    ///< %x1 denotes a text frame
@@ -64,22 +44,6 @@ typedef enum {
     WSop_pong  = 0x0A            ///< %xA denotes a pong
                                  ///< %xB-F are reserved for further control frames
 } WSopcode_t;
-
-typedef struct {
-    bool fin;
-    bool rsv1;
-    bool rsv2;
-    bool rsv3;
-
-    WSopcode_t opCode;
-    bool mask;
-
-    size_t payloadLen;
-
-    uint8_t * maskKey;
-} WSMessageHeader_t;
-
-
 
 
 //typedef HttpResponse ParsedHttpRequest;
@@ -102,7 +66,7 @@ public:
     bool sendFrame(WSopcode_t opcode, uint8_t * payload = NULL, int length = 0, bool fin = true, bool headerToPayload = false);
 
     HttpServer* getServer() { return _server; };
-    void setWSTimer(int time_ms) {_wsTimerCycle = time_ms;};
+    void setWSTimer(milliseconds cycleTime) {_wsTimerCycle = cycleTime;};
     const char* getThreadname() { return _threadName; };
 
 private:
@@ -127,7 +91,7 @@ private:
     CallbackRequestHandler _handler;
     WebSocketHandler* _webSocketHandler;
     Timer _timerWSTimeout;
-    int _wsTimerCycle;
+    milliseconds _wsTimerCycle;
 };
 
 
