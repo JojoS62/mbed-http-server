@@ -22,7 +22,8 @@
 
 #include "ClientConnection.h"
 #include "HttpServer.h"
-#include "sha1_ws.h"
+#include "sha1.h"
+#include "base64.h"
 
 #define MAGIC_NUMBER		"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 #define WS_ORIGIN           "Origin:"
@@ -265,46 +266,6 @@ bool ClientConnection::handleWebSocket(int size)
 	return true;
 }
 
-char* ClientConnection::base64Encode(const uint8_t* data, size_t size,
-                   char* outputBuffer, size_t outputBufferSize)
-{
-	static char encodingTable[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
-	                               'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
-	                               'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
-	                               'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
-	                               'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
-	                               'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
-	                               'w', 'x', 'y', 'z', '0', '1', '2', '3',
-	                               '4', '5', '6', '7', '8', '9', '+', '/'};
-    size_t outputLength = 4 * ((size + 2) / 3);
-    if (outputBufferSize - 1 < outputLength) { // -1 for NUL
-    	return NULL;
-    }
-
-    for (size_t i = 0, j = 0; i < size; /* nothing */) {
-        uint32_t octet1 = i < size ? (unsigned char)data[i++] : 0;
-        uint32_t octet2 = i < size ? (unsigned char)data[i++] : 0;
-        uint32_t octet3 = i < size ? (unsigned char)data[i++] : 0;
-
-        uint32_t triple = (octet1 << 0x10) + (octet2 << 0x08) + octet3;
-
-        outputBuffer[j++] = encodingTable[(triple >> 3 * 6) & 0x3F];
-        outputBuffer[j++] = encodingTable[(triple >> 2 * 6) & 0x3F];
-        outputBuffer[j++] = encodingTable[(triple >> 1 * 6) & 0x3F];
-        outputBuffer[j++] = encodingTable[(triple >> 0 * 6) & 0x3F];
-    }
-
-	static int padTable[] = { 0, 2, 1 };
-	int paddingCount = padTable[size % 3];
-
-    for (int i = 0; i < paddingCount; i++) {
-        outputBuffer[outputLength - 1 - i] = '=';
-    }
-    outputBuffer[outputLength] = '\0'; // NUL
-
-    return outputBuffer;
-}
-
 bool ClientConnection::sendUpgradeResponse(const char* key)
 {
 	char buf[128];
@@ -316,13 +277,11 @@ bool ClientConnection::sendUpgradeResponse(const char* key)
 	strcat(buf, MAGIC_NUMBER);
 
     uint8_t hash[20];
-	SHA1Context sha;
-    SHA1Reset(&sha);
-    SHA1Input(&sha, (unsigned char*)buf, strlen(buf));
-    SHA1Result(&sha, (uint8_t*)hash);
+    mbedtls_sha1((const unsigned char*)buf, strlen(buf), hash);
 
 	char encoded[30];
-    base64Encode(hash, 20, encoded, sizeof(encoded));
+    size_t olen;
+    mbedtls_base64_encode((unsigned char*)encoded, sizeof(encoded), &olen, hash, 20);
 
     char resp[] = "HTTP/1.1 101 Switching Protocols\r\n" \
 	    "Upgrade: websocket\r\n" \

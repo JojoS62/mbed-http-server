@@ -109,7 +109,6 @@ private:
     void receiveData();
     bool handleWebSocket(int size);
     void handleUpgradeRequest();
-    char* base64Encode(const uint8_t* data, size_t size, char* outputBuffer, size_t outputBufferSize);
     bool sendUpgradeResponse(const char* key);
     void printRequestHeader();
 
