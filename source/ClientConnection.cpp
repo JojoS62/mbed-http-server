@@ -291,8 +291,6 @@ bool ClientConnection::sendUpgradeResponse(const char* key)
     strcpy(ptr, encoded);
     strcpy(ptr+strlen(encoded), "\r\n\r\n");
 
-    //printf(resp);
-
     int ret = _socket->send(resp, strlen(resp));
     if (ret < 0) {
     	debug("ERROR: Failed to send response\r\n");
@@ -399,9 +397,9 @@ bool ClientConnection::sendFrameHeader(WSopcode_t opcode, int length, bool fin) 
     uint8_t maskKey[4]                         = { 0x00, 0x00, 0x00, 0x00 };
     uint8_t buffer[WEBSOCKETS_MAX_HEADER_SIZE] = { 0 };
 
-    int headerSize = createHeader(&buffer[0], opcode, length, _cIsClient, maskKey, fin);
+    int headerSize = createHeader(buffer, opcode, length, _cIsClient, maskKey, fin);
 
-    if(_socket->send(&buffer[0], headerSize) != headerSize) {
+    if(send((const char*)buffer, headerSize) != headerSize) {
         return false;
     }
 
@@ -458,9 +456,6 @@ bool ClientConnection::sendFrame( WSopcode_t opcode, uint8_t * payload, int leng
         headerSize += 4;
     }
 
-//#ifdef WEBSOCKETS_USE_BIG_MEM
-    // only for ESP since AVR has less HEAP
-    // try to send data in one TCP package (only if some free Heap is there)
     if(!headerToPayload && ((length > 0) && (length < 1400)) ) { // Todo: && (GET_FREE_HEAP > 6000)) {
         DEBUG_WEBSOCKETS("[WS][sendFrame] pack to one TCP package...\n");
         uint8_t * dataPtr = (uint8_t *)malloc(length + WEBSOCKETS_MAX_HEADER_SIZE);
@@ -471,12 +466,10 @@ bool ClientConnection::sendFrame( WSopcode_t opcode, uint8_t * payload, int leng
             payloadPtr      = dataPtr;
         }
     }
-//#endif
 
     // set Header Pointer
     if(headerToPayload) {
-        // calculate offset in payload
-        headerPtr = (payloadPtr + (WEBSOCKETS_MAX_HEADER_SIZE - headerSize));
+        headerPtr = (payloadPtr + (WEBSOCKETS_MAX_HEADER_SIZE - headerSize));  // calculate offset in payload
     } else {
         headerPtr = &buffer[0];
     }
@@ -509,30 +502,24 @@ bool ClientConnection::sendFrame( WSopcode_t opcode, uint8_t * payload, int leng
         // header has be added to payload
         // payload is forced to reserved 14 Byte but we may not need all based on the length and mask settings
         // offset in payload is calculatetd 14 - headerSize
-        if(_socket->send(&payloadPtr[(WEBSOCKETS_MAX_HEADER_SIZE - headerSize)], (length + headerSize)) != (length + headerSize)) {
+        if(send((const char*)payloadPtr + WEBSOCKETS_MAX_HEADER_SIZE - headerSize, (length + headerSize)) != (length + headerSize)) {
             ret = false;
         }
     } else {
-        // send header
-        if(_socket->send(&buffer[0], headerSize) != headerSize) {
+        if(send((const char*)buffer, headerSize) != headerSize) {       // send header
             ret = false;
         }
 
         if(payloadPtr && length > 0) {
-            // send payload
-            if(_socket->send(&payloadPtr[0], length) != length) {
+            if(send((const char*)payloadPtr, length) != length) {       // send payload
                 ret = false;
             }
         }
     }
 
-    //DEBUG_WEBSOCKETS("[WS][sendFrame] sending Frame Done (%luus).\n", (micros() - start));
-
-//#ifdef WEBSOCKETS_USE_BIG_MEM
     if(useInternBuffer && payloadPtr) {
         free(payloadPtr);
     }
-//#endif
 
     return ret;
 }
