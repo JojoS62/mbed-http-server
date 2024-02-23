@@ -205,7 +205,7 @@ public:
                     bytesRead += n;
             }
 
-            delete chunkBuffer;
+            delete[] chunkBuffer;
         }
 
         if (res == 0) {
