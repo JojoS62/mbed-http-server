@@ -93,15 +93,26 @@ ClientConnection::~ClientConnection() {
 void ClientConnection::start(TCPSocket* socket) {
     _socketIsOpen = true;
     _socket = socket;
-    _socket->set_timeout(10000);
-    //_socket->set_blocking(false);
+    // _socket->set_timeout(10000);
+    _socket->set_blocking(true);
     _webSocketHandler = nullptr; 
     _parser.clear();
     _request.clear();
     _semWaitForSocket.release();
 }
 
-void ClientConnection::receiveData() {
+void ClientConnection::textWs(const char *url, const char *text, int length)
+{
+    if (!_isWebSocket) 
+        return;
+
+    if (_wsOrigin.compare(url) == 0) {
+        sendFrame(WSop_text, (const uint8_t*)text, length);
+    }
+}
+
+void ClientConnection::receiveData()
+{
     while (1) {
         bool wsCloseRequest = false;
         _semWaitForSocket.acquire();
@@ -109,9 +120,9 @@ void ClientConnection::receiveData() {
         debug("%s: run receiveData\n", _threadName);
         while(_socketIsOpen) {
             nsapi_size_or_error_t recv_ret;
-            if (!_isWebSocket) {
-                _socket->set_timeout(10000);     // timeout to defend connections without sending data
-            }
+            // if (!_isWebSocket) {
+            //     _socket->set_timeout(10000);     // timeout to defend connections without sending data
+            // }
             while ((recv_ret = _socket->recv(_recv_buffer, HTTP_RECEIVE_BUFFER_SIZE)) > 0) {
                 if (_isWebSocket) {
                     break;  // Websocket must not be parsed
@@ -131,12 +142,12 @@ void ClientConnection::receiveData() {
             }
 
             // cyclic callback if websocket
-            if (_isWebSocket) {
-                if (recv_ret == NSAPI_ERROR_WOULD_BLOCK) {
-                    if (_webSocketHandler)
-                        _webSocketHandler->onTimer();
-                }
-            }
+            // if (_isWebSocket) {
+            //     if (recv_ret == NSAPI_ERROR_WOULD_BLOCK) {
+            //         if (_webSocketHandler)
+            //             _webSocketHandler->onTimer();
+            //     }
+            // }
             
             // ws upgrade or simple http handling
             if (recv_ret > 0) {
@@ -146,7 +157,7 @@ void ClientConnection::receiveData() {
                 } else {
                     if (_request.get_Upgrade()) {                 
                         handleUpgradeRequest();                             // handle upgrade request 
-                        _socket->set_timeout(_wsTimerCycle.count());
+                        // _socket->set_timeout(_wsTimerCycle.count());
                         _timerWSTimeout.reset();
                         _timerWSTimeout.start();
                     } else {                                                
@@ -217,15 +228,16 @@ void ClientConnection::handleUpgradeRequest() {
     }
 
     CreateWSHandlerFn createFn = _server->getWSHandler(_request.get_url().c_str());
-    _webSocketHandler = createFn();    // handler for this url available?
 
-    if (upgradeWebsocketfound && !secWebsocketKey.empty() && _webSocketHandler) {   // neccessary header keys found?
+    if (upgradeWebsocketfound && !secWebsocketKey.empty() && createFn) {        // neccessary header keys found and handler available
         if (_server->isWebsocketAvailable()) {                                  // Websockets available?
-            _isWebSocket = sendUpgradeResponse(secWebsocketKey.c_str());                // do upgrade handshake
+            _isWebSocket = sendUpgradeResponse(secWebsocketKey.c_str());        // do upgrade handshake
 
-            if (_isWebSocket) {                                                 // if successful
+            if (_isWebSocket && createFn) {                                     // if upgrade successful
                 _server->incWebsocketCount();
-                //mHandler->setOrigin(origin);
+                _webSocketHandler = createFn();                                 // create handler instance
+                _webSocketHandler->setOrigin(_request.get_url().c_str());
+                _wsOrigin = _request.get_url().c_str();
                 _webSocketHandler->onOpen(this);                                // handler callback for onOpen()
             } 
         }
@@ -453,32 +465,29 @@ bool ClientConnection::sendFrameHeader(WSopcode_t opcode, int length, bool fin) 
  * @param headerToPayload bool  set true if the payload has reserved 14 Byte at the beginning to dynamically add the Header (payload neet to be in RAM!)
  * @return true if ok
  */
-bool ClientConnection::sendFrame( WSopcode_t opcode, uint8_t * payload, int length, bool fin, bool headerToPayload) {
-    if (0) {  // Todo: isConnected()    (client->tcp && !client->tcp->connected()) {
+bool ClientConnection::sendFrame( WSopcode_t opcode, const uint8_t * payload, int length, bool fin) {
+    if (!_socketIsOpen) {  // Todo: isConnected()    (client->tcp && !client->tcp->connected()) {
         DEBUG_WEBSOCKETS("[WS][sendFrame] not Connected!?\n");
         return false;
     }
 
-    if (0) {  // Todo: isWCSconnected  (client->status != WSC_CONNECTED) {
+    if (!_isWebSocket) {  // Todo: isWCSconnected  (client->status != WSC_CONNECTED) {
         DEBUG_WEBSOCKETS("[WS][sendFrame] not in WSC_CONNECTED state!?\n");
         return false;
     }
 
     DEBUG_WEBSOCKETS("[WS][sendFrame] ------- send message frame -------\n");
-    DEBUG_WEBSOCKETS("[WS][sendFrame] fin: %u opCode: %u mask: %u length: %u headerToPayload: %u\n", fin, opcode, _cIsClient, length, headerToPayload);
+    DEBUG_WEBSOCKETS("[WS][sendFrame] fin: %u opCode: %u mask: %u length: %u headerToPayload: %u\n", fin, opcode, _cIsClient, length);
 
     if(opcode == WSop_text) {
-        DEBUG_WEBSOCKETS("[WS][sendFrame] text: %s\n", (payload + (headerToPayload ? 14 : 0)));
+        DEBUG_WEBSOCKETS("[WS][sendFrame] text: %s\n", payload);
     }
 
     uint8_t maskKey[4]                         = { 0x00, 0x00, 0x00, 0x00 };
-    uint8_t buffer[WEBSOCKETS_MAX_HEADER_SIZE] = { 0 };
+    uint8_t header[WEBSOCKETS_MAX_HEADER_SIZE] = { 0 };
 
     int headerSize;
-    uint8_t * headerPtr;
-    uint8_t * payloadPtr = payload;
-    bool useInternBuffer = false;
-    bool ret             = true;
+    bool ret = true;
 
     // calculate header Size
     if(length < 126) {
@@ -493,69 +502,16 @@ bool ClientConnection::sendFrame( WSopcode_t opcode, uint8_t * payload, int leng
         headerSize += 4;
     }
 
-    if(!headerToPayload && ((length > 0) && (length < 1400)) ) { // Todo: && (GET_FREE_HEAP > 6000)) {
-        DEBUG_WEBSOCKETS("[WS][sendFrame] pack to one TCP package...\n");
-        uint8_t * dataPtr = (uint8_t *)malloc(length + WEBSOCKETS_MAX_HEADER_SIZE);
-        if(dataPtr) {
-            memcpy((dataPtr + WEBSOCKETS_MAX_HEADER_SIZE), payload, length);
-            headerToPayload = true;
-            useInternBuffer = true;
-            payloadPtr      = dataPtr;
-        }
+    createHeader(header, opcode, length, _cIsClient, maskKey, fin);
+
+    if(send((const char*)header, headerSize) != headerSize) {       // send header
+        ret = false;
     }
 
-    // set Header Pointer
-    if(headerToPayload) {
-        headerPtr = (payloadPtr + (WEBSOCKETS_MAX_HEADER_SIZE - headerSize));  // calculate offset in payload
-    } else {
-        headerPtr = &buffer[0];
-    }
-
-    if(_cIsClient && useInternBuffer) {
-        // if we use a Intern Buffer we can modify the data
-        // by this fact its possible the do the masking
-        for(uint8_t x = 0; x < sizeof(maskKey); x++) {
-            maskKey[x] = random() & 0xff;
-        }
-    }
-
-    createHeader(headerPtr, opcode, length, _cIsClient, maskKey, fin);
-
-    if(useInternBuffer) {
-        uint8_t * dataMaskPtr;
-
-        if(headerToPayload) {
-            dataMaskPtr = (payloadPtr + WEBSOCKETS_MAX_HEADER_SIZE);
-        } else {
-            dataMaskPtr = payloadPtr;
-        }
-
-        for(int x = 0; x < length; x++) {
-            dataMaskPtr[x] = (dataMaskPtr[x] ^ maskKey[x % 4]);
-        }
-    }
-
-    if(headerToPayload) {
-        // header has be added to payload
-        // payload is forced to reserved 14 Byte but we may not need all based on the length and mask settings
-        // offset in payload is calculatetd 14 - headerSize
-        if(send((const char*)payloadPtr + WEBSOCKETS_MAX_HEADER_SIZE - headerSize, (length + headerSize)) != (length + headerSize)) {
+    if(payload && length > 0) {
+        if(send((const char*)payload, length) != length) {       // send payload
             ret = false;
         }
-    } else {
-        if(send((const char*)buffer, headerSize) != headerSize) {       // send header
-            ret = false;
-        }
-
-        if(payloadPtr && length > 0) {
-            if(send((const char*)payloadPtr, length) != length) {       // send payload
-                ret = false;
-            }
-        }
-    }
-
-    if(useInternBuffer && payloadPtr) {
-        free(payloadPtr);
     }
 
     return ret;

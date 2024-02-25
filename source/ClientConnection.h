@@ -61,13 +61,13 @@ public:
     nsapi_size_or_error_t send(const char* buffer, size_t len);
 
     // Websocket functions
-    uint8_t createHeader(uint8_t * buf, WSopcode_t opcode, size_t length, bool mask, uint8_t maskKey[4], bool fin);
-    bool sendFrameHeader(WSopcode_t opcode, int length = 0, bool fin = true);
-    bool sendFrame(WSopcode_t opcode, uint8_t * payload = NULL, int length = 0, bool fin = true, bool headerToPayload = false);
+    bool sendFrame(WSopcode_t opcode, const uint8_t * payload = NULL, int length = 0, bool fin = true);
 
     HttpServer* getServer() { return _server; };
     void setWSTimer(milliseconds cycleTime) {_wsTimerCycle = cycleTime;};
     const char* getThreadname() { return _threadName; };
+    bool isWebSocket() { return _isWebSocket; };
+    void textWs(const char* url, const char* text, int length);
 
 private:
     void receiveData();
@@ -75,6 +75,8 @@ private:
     void handleUpgradeRequest();
     bool sendUpgradeResponse(const char* key);
     void printRequestHeader();
+    uint8_t createHeader(uint8_t * buf, WSopcode_t opcode, size_t length, bool mask, uint8_t maskKey[4], bool fin);
+    bool sendFrameHeader(WSopcode_t opcode, int length = 0, bool fin = true);
 
     const char* _threadName;
     Semaphore _semWaitForSocket;
@@ -92,6 +94,7 @@ private:
     WebSocketHandler* _webSocketHandler;
     Timer _timerWSTimeout;
     milliseconds _wsTimerCycle;
+    std::string _wsOrigin;
 };
 
 

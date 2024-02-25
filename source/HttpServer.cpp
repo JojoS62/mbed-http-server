@@ -111,6 +111,18 @@ CreateWSHandlerFn HttpServer::getWSHandler(const char* path)
 	return nullptr;
 }
 
+void HttpServer::wsTextAll(const char *origin, const char *text, int length)
+{
+    if (length == 0)
+        length = strlen(text);
+        
+    for(auto it : _clientConnections) {
+        if (it->isWebSocket()) {
+            it->textWs(origin, text, length);
+        }
+    }
+}
+
 void HttpServer::setHTTPHandler(const char* path, CallbackRequestHandler handler)
 {
 	_HTTPHandlers[path] = handler;

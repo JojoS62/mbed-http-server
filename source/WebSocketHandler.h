@@ -16,10 +16,11 @@ public:
     virtual void onMessage(const char* data, size_t size) {};
     virtual void onTimer() {};
     virtual void onError() {};
-    virtual void setOrigin(char* origin) { /* use strcpy to copy originstring if needed */ };
+    void setOrigin(const char* origin) { _origin = origin; };
 
 protected:
     ClientConnection *_clientConnection;
+    std::string _origin;
 };
 
 
