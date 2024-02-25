@@ -185,7 +185,7 @@ public:
 
         // send file chunks
         if ((res == 0) && (sent > 0)) {
-            const size_t maxChunkSize = 2*1024;
+            const size_t maxChunkSize = 4*1024;
             char *chunkBuffer = new char[maxChunkSize];
             MBED_ASSERT(chunkBuffer);
             size_t bytesRead = 0;
