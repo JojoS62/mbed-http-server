@@ -64,7 +64,7 @@ public:
 
     void setWSHandler(const char* path, CreateWSHandlerFn handler);
     CreateWSHandlerFn getWSHandler(const char* path);
-    void wsTextAll(const char* origin, const char* text, int length = 0);
+    void wsSendTextAll(const char* origin, const char* text, int length = 0);
 
     void addStandardHeader(const char* key, const char* value);
     const map<string, string>& getStandardHeaders();

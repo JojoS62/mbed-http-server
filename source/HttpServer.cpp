@@ -111,7 +111,7 @@ CreateWSHandlerFn HttpServer::getWSHandler(const char* path)
 	return nullptr;
 }
 
-void HttpServer::wsTextAll(const char *origin, const char *text, int length)
+void HttpServer::wsSendTextAll(const char *origin, const char *text, int length)
 {
     if (length == 0)
         length = strlen(text);

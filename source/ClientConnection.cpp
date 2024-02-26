@@ -74,7 +74,7 @@ typedef struct {
 
 
 ClientConnection::ClientConnection(HttpServer* server, const char* name) :
-    _threadClientConnection(osPriorityNormal, 3*1024, nullptr, name),
+    _threadClientConnection(osPriorityAboveNormal, 3*1024, nullptr, name),
     _parser(&_request) 
 { 
     _threadName = name;
@@ -93,7 +93,7 @@ ClientConnection::~ClientConnection() {
 void ClientConnection::start(TCPSocket* socket) {
     _socketIsOpen = true;
     _socket = socket;
-    // _socket->set_timeout(10000);
+    //  _socket->set_timeout(10);
     _socket->set_blocking(true);
     _webSocketHandler = nullptr; 
     _parser.clear();
@@ -113,27 +113,30 @@ void ClientConnection::textWs(const char *url, const char *text, int length)
 
 void ClientConnection::receiveData()
 {
+    bool _wsCloseRequest;
+
     while (1) {
-        bool wsCloseRequest = false;
         _semWaitForSocket.acquire();
+        _wsCloseRequest = false;
 
         debug("%s: run receiveData\n", _threadName);
         while(_socketIsOpen) {
             nsapi_size_or_error_t recv_ret;
-            // if (!_isWebSocket) {
-            //     _socket->set_timeout(10000);     // timeout to defend connections without sending data
-            // }
-            while ((recv_ret = _socket->recv(_recv_buffer, HTTP_RECEIVE_BUFFER_SIZE)) > 0) {
+
+            recv_ret = _socket->recv(_recv_buffer, HTTP_RECEIVE_BUFFER_SIZE);
+            while (recv_ret > 0 || recv_ret == NSAPI_ERROR_WOULD_BLOCK) {
                 if (_isWebSocket) {
                     break;  // Websocket must not be parsed
                 }
 
                 // Pass the chunk into the http_parser
-                int nparsed = _parser.execute((const char*)_recv_buffer, recv_ret);
-                if (nparsed != recv_ret) {
-                    debug("%s: Parsing failed... parsed %d bytes, received %d bytes\n", _threadName, nparsed, recv_ret);
-                    recv_ret = -2101;
-                    break;
+                if (recv_ret >0) {
+                    int nparsed = _parser.execute((const char*)_recv_buffer, recv_ret);
+                    if (nparsed != recv_ret) {
+                        debug("%s: Parsing failed... parsed %d bytes, received %d bytes\n", _threadName, nparsed, recv_ret);
+                        recv_ret = -2101;
+                        break;
+                    }
                 }
 
                 if (_request.is_message_complete()) {
@@ -141,23 +144,16 @@ void ClientConnection::receiveData()
                 }
             }
 
-            // cyclic callback if websocket
-            // if (_isWebSocket) {
-            //     if (recv_ret == NSAPI_ERROR_WOULD_BLOCK) {
-            //         if (_webSocketHandler)
-            //             _webSocketHandler->onTimer();
-            //     }
-            // }
-            
             // ws upgrade or simple http handling
             if (recv_ret > 0) {
-                if (_isWebSocket) { 
+                if (_isWebSocket) {                                         // I'm already a Websocket
                     _timerWSTimeout.reset();                                // received some data, reset watchdog
-                    wsCloseRequest = (handleWebSocket(recv_ret) == false);  // I'm already a Websocket
+                    _wsCloseRequest = handleWebSocket(recv_ret);                              
                 } else {
                     if (_request.get_Upgrade()) {                 
                         handleUpgradeRequest();                             // handle upgrade request 
                         // _socket->set_timeout(_wsTimerCycle.count());
+                        _socket->set_blocking(true);
                         _timerWSTimeout.reset();
                         _timerWSTimeout.start();
                     } else {                                                
@@ -171,21 +167,23 @@ void ClientConnection::receiveData()
 
             // check for connection close
             if(_isWebSocket) {
-                if (wsCloseRequest || (recv_ret == 0) || (_timerWSTimeout.elapsed_time() > 20s) ) {
+                if (_wsCloseRequest || (recv_ret == 0) || (_timerWSTimeout.elapsed_time() > 20s) ) {
+                    debug("WS close: wsCloseRequest: %d  recv_ret: %d  timer: %lld\n", _wsCloseRequest, recv_ret, _timerWSTimeout.elapsed_time().count());
                     _webSocketHandler->onClose();
                     sendFrame(WSop_close);
-                    _server->decWebsocketCount();       // websocket was closed, decrement websocket count
+                    _server->decWebsocketCount();                           // websocket was closed, decrement websocket count
                     if (_webSocketHandler)
                         delete _webSocketHandler;
                     _isWebSocket = false;
-                    _socket->close();                       // close socket. Because allocated by accept(), it will be deleted by itself
+                    _socket->close();                                       // close socket. Because allocated by accept(), it will be deleted by itself
                     _socketIsOpen = false;
                     _timerWSTimeout.stop();
                 }
             } else
             {
+                // debug("%s: socket would close\n", _threadName);
                 debug("%s: socket closed, recv_ret %d\n", _threadName, recv_ret);
-                _socket->close();                       // close socket. Because allocated by accept(), it will be deleted by itself
+                _socket->close();                                           // close socket. Because allocated by accept(), it will be deleted by itself
                 _socketIsOpen = false;
             }
         }
@@ -269,50 +267,52 @@ bool ClientConnection::handleWebSocket(int size)
 
 	if (opcode == OP_PING) {
 		*ptr = ((*ptr & 0xF0) | OP_PONG);
-		_socket->send(_recv_buffer, size);
-		return true;
+		send((const char*)_recv_buffer, size);
+		return false;
 	}
 	if (opcode == OP_CLOSE) {
-        //printf("received OP_CLOSE\n");
-		return false;
+        printf("received OP_CLOSE\n");
+		return true;
 	}
 	ptr++;
 
 	if (!fin || !_mPrevFin) {	
 		debug("WARN: Data consists of multiple frame not supported\r\n");
 		_mPrevFin = fin;
-		return true; // not an error, just discard it
+		return false; // not an error, just discard it
 	}
 	_mPrevFin = fin;
 
 	bool mask = (*ptr & 0x80) == 0x80;
-	uint8_t len = *ptr & 0x7F;
+	int len = *ptr & 0x7F;
 	ptr++;
 	
 	if (len > 125) {
 		debug("WARN: Extended payload length not supported\r\n");
-		return true; // not an error, just discard it
+		return false; // not an error, just discard it
 	}
 
-	char* data;
+	uint8_t* data;
 	if (mask) {
-		char* maskingKey = (char*)ptr;
-		data = (char*)(ptr + 4);
+		uint8_t* maskingKey = ptr;
+		data = ptr + 4;
 		for (int i = 0; i < len; i++) {
         	data[i] = data[i] ^ maskingKey[(i % 4)];
         }
 	} else {
-		data = (char*)ptr;
+		data = ptr;
 	}
+
 	if (_webSocketHandler) {
 		if (opcode == OP_TEXT) {
 			data[len] = '\0';
-			_webSocketHandler->onMessage(data);
+			_webSocketHandler->onMessage((const char*)data);
 		} else if (opcode == OP_BINARY) {
-			_webSocketHandler->onMessage(data, len);
+			_webSocketHandler->onMessage((const char*)data, len);
 		}
 	}
-	return true;
+	
+    return false;
 }
 
 bool ClientConnection::sendUpgradeResponse(const char* key)
@@ -340,7 +340,7 @@ bool ClientConnection::sendUpgradeResponse(const char* key)
     strcpy(ptr, encoded);
     strcpy(ptr+strlen(encoded), "\r\n\r\n");
 
-    int ret = _socket->send(resp, strlen(resp));
+    int ret = send(resp, strlen(resp));
     if (ret < 0) {
     	debug("ERROR: Failed to send response\r\n");
     	return false;
