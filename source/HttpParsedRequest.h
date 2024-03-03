@@ -165,7 +165,7 @@ public:
 
     // called by parser on request
     void set_headers_complete() {
-        MapHeaderIterator it = headers.find("content-length");
+        MapHeaderIterator it = headers.find("Content-Length");
         if(it != headers.end()) {
             expected_content_length = atoi(it->second.c_str());
         }
