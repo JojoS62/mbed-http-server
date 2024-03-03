@@ -80,9 +80,7 @@ ClientConnection::ClientConnection(HttpServer* server, const char* name) :
     _threadName = name;
     _isWebSocket = false;
     _server = server;
-    _cIsClient = false;          // for websocket send, meaning ???
     _socketIsOpen = false;
-    _semWaitForSocket.try_acquire();
     _threadClientConnection.start(callback(this, &ClientConnection::receiveData));
 };
 
@@ -93,12 +91,11 @@ ClientConnection::~ClientConnection() {
 void ClientConnection::start(TCPSocket* socket) {
     _socketIsOpen = true;
     _socket = socket;
-    //  _socket->set_timeout(10);
     _socket->set_blocking(true);
     _webSocketHandler = nullptr; 
     _parser.clear();
     _request.clear();
-    _semWaitForSocket.release();
+    _threadClientConnection.flags_set(0x01);
 }
 
 void ClientConnection::textWs(const char *url, const char *text, int length)
@@ -114,35 +111,21 @@ void ClientConnection::textWs(const char *url, const char *text, int length)
 void ClientConnection::receiveData()
 {
     bool _wsCloseRequest;
+    bool _closeRequest;
 
     while (1) {
-        _semWaitForSocket.acquire();
+        ThisThread::flags_wait_any(0x01);
         _wsCloseRequest = false;
+        _closeRequest = false;
 
         debug("%s: run receiveData\n", _threadName);
         while(_socketIsOpen) {
-            nsapi_size_or_error_t recv_ret;
-
-            recv_ret = _socket->recv(_recv_buffer, HTTP_RECEIVE_BUFFER_SIZE);
-            while (recv_ret > 0 || recv_ret == NSAPI_ERROR_WOULD_BLOCK) {
-                if (_isWebSocket) {
-                    break;  // Websocket must not be parsed
-                }
-
-                // Pass the chunk into the http_parser
-                if (recv_ret >0) {
-                    int nparsed = _parser.execute((const char*)_recv_buffer, recv_ret);
-                    if (nparsed != recv_ret) {
-                        debug("%s: Parsing failed... parsed %d bytes, received %d bytes\n", _threadName, nparsed, recv_ret);
-                        recv_ret = -2101;
-                        break;
-                    }
-                }
-
-                if (_request.is_message_complete()) {
-                    break;
-                }
+            nsapi_size_or_error_t recv_ret = _socket->recv(_recv_buffer, HTTP_RECEIVE_BUFFER_SIZE);
+            if (recv_ret == NSAPI_ERROR_WOULD_BLOCK) {
+                ThisThread::sleep_for(20ms);
+                break;
             }
+            debug_if(recv_ret <= 0, "%s: recv_ret: %d\n", _threadName, recv_ret);
 
             // ws upgrade or simple http handling
             if (recv_ret > 0) {
@@ -150,20 +133,30 @@ void ClientConnection::receiveData()
                     _timerWSTimeout.reset();                                // received some data, reset watchdog
                     _wsCloseRequest = handleWebSocket(recv_ret);                              
                 } else {
-                    if (_request.get_Upgrade()) {                 
-                        handleUpgradeRequest();                             // handle upgrade request 
-                        // _socket->set_timeout(_wsTimerCycle.count());
-                        _socket->set_blocking(true);
-                        _timerWSTimeout.reset();
-                        _timerWSTimeout.start();
-                    } else {                                                
-                        _parser.finish();                                   // no websocket, normal http handling
-                        _handler = _server->getHTTPHandler(_request.get_url().c_str());
-                        if (_handler)
-                            _handler(&_request, this);
-                    } 
-                } 
-            }
+                    int nparsed = _parser.execute((const char*)_recv_buffer, recv_ret);
+                    if (nparsed != recv_ret) {
+                        debug("%s: Parsing failed... parsed %d bytes, received %d bytes\n", _threadName, nparsed, recv_ret);
+                        // recv_ret = -2101;
+                        // _closeRequest = true;
+                        // break;
+                    }
+
+                    if (_request.is_message_complete()) {
+                        if (_request.get_Upgrade()) {                               // is websocket upgrade request?
+                            handleUpgradeRequest();                                 // handle upgrade request 
+                            _timerWSTimeout.reset();
+                            _timerWSTimeout.start();
+                        } else {                                                
+                            _parser.finish();                                       // no websocket, normal http handling
+                            _handler = _server->getHTTPHandler(_request.get_url().c_str());
+                            if (_handler)
+                                _handler(&_request, this);
+                            if (_request.headers["Connection"] == "close")
+                                _closeRequest = true;
+                        } 
+                    }
+                }
+            } 
 
             // check for connection close
             if(_isWebSocket) {
@@ -181,10 +174,11 @@ void ClientConnection::receiveData()
                 }
             } else
             {
-                // debug("%s: socket would close\n", _threadName);
-                debug("%s: socket closed, recv_ret %d\n", _threadName, recv_ret);
-                _socket->close();                                           // close socket. Because allocated by accept(), it will be deleted by itself
-                _socketIsOpen = false;
+                if (recv_ret == 0 || _closeRequest) {
+                    debug("%s: socket closed, recv_ret: %d  closeRequest: %d\n", _threadName, recv_ret, _closeRequest);
+                    _socket->close();                                       // close socket. Because allocated by accept(), it will be deleted by itself
+                    _socketIsOpen = false;
+                }
             }
         }
     }
@@ -358,7 +352,7 @@ bool ClientConnection::sendUpgradeResponse(const char* key)
  * @param maskkey uint8_t[4]    key used for payload
  * @param fin bool              can be used to send data in more then one frame (set fin on the last frame)
  */
-uint8_t ClientConnection::createHeader(uint8_t * headerPtr, WSopcode_t opcode, size_t length, bool mask, uint8_t maskKey[4], bool fin) {
+uint8_t ClientConnection::createHeader(uint8_t * headerPtr, WSopcode_t opcode, size_t length, uint8_t maskKey[4], bool fin) {
     uint8_t headerSize;
     // calculate header Size
     if(length < 126) {
@@ -369,12 +363,7 @@ uint8_t ClientConnection::createHeader(uint8_t * headerPtr, WSopcode_t opcode, s
         headerSize = 10;
     }
 
-    if(mask) {
-        headerSize += 4;
-    }
-
     // create header
-
     // byte 0
     *headerPtr = 0x00;
     if(fin) {
@@ -385,9 +374,6 @@ uint8_t ClientConnection::createHeader(uint8_t * headerPtr, WSopcode_t opcode, s
 
     // byte 1
     *headerPtr = 0x00;
-    if(mask) {
-        *headerPtr |= (1 << 7);    ///< set mask
-    }
 
     if(length < 126) {
         *headerPtr |= length;
@@ -421,16 +407,6 @@ uint8_t ClientConnection::createHeader(uint8_t * headerPtr, WSopcode_t opcode, s
         headerPtr++;
     }
 
-    if(mask) {
-        *headerPtr = maskKey[0];
-        headerPtr++;
-        *headerPtr = maskKey[1];
-        headerPtr++;
-        *headerPtr = maskKey[2];
-        headerPtr++;
-        *headerPtr = maskKey[3];
-        headerPtr++;
-    }
     return headerSize;
 }
 
@@ -446,7 +422,7 @@ bool ClientConnection::sendFrameHeader(WSopcode_t opcode, int length, bool fin) 
     uint8_t maskKey[4]                         = { 0x00, 0x00, 0x00, 0x00 };
     uint8_t buffer[WEBSOCKETS_MAX_HEADER_SIZE] = { 0 };
 
-    int headerSize = createHeader(buffer, opcode, length, _cIsClient, maskKey, fin);
+    int headerSize = createHeader(buffer, opcode, length, maskKey, fin);
 
     if(send((const char*)buffer, headerSize) != headerSize) {
         return false;
@@ -477,7 +453,7 @@ bool ClientConnection::sendFrame( WSopcode_t opcode, const uint8_t * payload, in
     }
 
     DEBUG_WEBSOCKETS("[WS][sendFrame] ------- send message frame -------\n");
-    DEBUG_WEBSOCKETS("[WS][sendFrame] fin: %u opCode: %u mask: %u length: %u headerToPayload: %u\n", fin, opcode, _cIsClient, length);
+    DEBUG_WEBSOCKETS("[WS][sendFrame] fin: %u opCode: %u length: %u\n", fin, opcode, length);
 
     if(opcode == WSop_text) {
         DEBUG_WEBSOCKETS("[WS][sendFrame] text: %s\n", payload);
@@ -498,11 +474,7 @@ bool ClientConnection::sendFrame( WSopcode_t opcode, const uint8_t * payload, in
         headerSize = 10;
     }
 
-    if(_cIsClient) {
-        headerSize += 4;
-    }
-
-    createHeader(header, opcode, length, _cIsClient, maskKey, fin);
+    createHeader(header, opcode, length, maskKey, fin);
 
     if(send((const char*)header, headerSize) != headerSize) {       // send header
         ret = false;

@@ -75,11 +75,10 @@ private:
     void handleUpgradeRequest();
     bool sendUpgradeResponse(const char* key);
     void printRequestHeader();
-    uint8_t createHeader(uint8_t * buf, WSopcode_t opcode, size_t length, bool mask, uint8_t maskKey[4], bool fin);
+    uint8_t createHeader(uint8_t * buf, WSopcode_t opcode, size_t length, uint8_t maskKey[4], bool fin);
     bool sendFrameHeader(WSopcode_t opcode, int length = 0, bool fin = true);
 
     const char* _threadName;
-    Semaphore _semWaitForSocket;
     bool _socketIsOpen;
     HttpServer* _server;
     TCPSocket* _socket;
@@ -88,7 +87,6 @@ private:
     HttpRequestParser _parser;
     bool _isWebSocket;
     bool _mPrevFin;
-    bool _cIsClient;
     uint8_t _recv_buffer[HTTP_RECEIVE_BUFFER_SIZE];
     CallbackRequestHandler _handler;
     WebSocketHandler* _webSocketHandler;
