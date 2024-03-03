@@ -120,7 +120,7 @@ public:
 
     nsapi_size_or_error_t sendHeader(uint16_t statusCode) 
     {
-        _buffer.reserve(1024);
+        _buffer.reserve(512);
 
         _buffer = "HTTP/1.1 ";
         _buffer += to_string(statusCode);
@@ -128,29 +128,28 @@ public:
         _buffer += get_http_status_string(statusCode);
         _buffer += "\r\n";
 
-        typedef map<string, string>::iterator it_type;
         // get standardHeaders from HTTPServer
         map<string, string> standardHeaders = _clientConnection->getServer()->getStandardHeaders();
-        for(it_type it = standardHeaders.begin(); it != standardHeaders.end(); it++) {
+        for(auto it : standardHeaders) {
             // line is KEY: VALUE\r\n
-            _buffer += it->first;
+            _buffer += it.first;
             _buffer += ":";
-            _buffer += it->second;
+            _buffer += it.second;
             _buffer += "\r\n";
         }
 
         // send additional Headers
-        for(it_type it = headers.begin(); it != headers.end(); it++) {
+        for(auto it : headers) {
             // line is KEY: VALUE\r\n
-            _buffer += it->first;
+            _buffer += it.first;
             _buffer += ":";
-            _buffer += it->second;
+            _buffer += it.second;
             _buffer += "\r\n";
         }
 
         _buffer += "\r\n";
 
-        //printf(_buffer.c_str());
+        printf("header: %s",_buffer.c_str());
 
         // send header
         nsapi_size_or_error_t sent = _clientConnection->send(_buffer.c_str(),  _buffer.size());
@@ -225,7 +224,7 @@ public:
     nsapi_error_t sendContent(uint16_t statusCode, string content, const char* contentType = "text/html; charset=utf-8") 
     {
         headers["Content-Type"] = contentType;
-        headers["Connection"] = "close";
+        headers["Content-Length"] = to_string(content.length());
 
         nsapi_size_or_error_t sent = sendHeader(statusCode);
         if (sent >= 0) {
