@@ -149,7 +149,7 @@ public:
 
         _buffer += "\r\n";
 
-        printf("header: %s",_buffer.c_str());
+        // debug("header: %s",_buffer.c_str());
 
         // send header
         nsapi_size_or_error_t sent = _clientConnection->send(_buffer.c_str(),  _buffer.size());
